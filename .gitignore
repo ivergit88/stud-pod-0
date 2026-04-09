@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.deploy.env
+database.sqlite
+*.tar.gz
+*.zip
+*.log
+coverage/
