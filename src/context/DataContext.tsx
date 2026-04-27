@@ -3,6 +3,7 @@ import { apiRequest } from '../lib/api';
 import { useAuth } from './AuthContext';
 import type { TaskFormat } from '../lib/tasks';
 import type { TaskType, TaskUrgency, TaskWorkload } from '../lib/task-scoring';
+import type { GeneratedProjectSubtask } from '../lib/task-projects';
 
 export interface Task {
   id: string;
@@ -25,6 +26,14 @@ export interface Task {
   pointsRecommended: number;
   pointsMax: number;
   pointsExplanation: string[];
+  taskKind: 'single' | 'parent' | 'subtask';
+  parentTaskId?: string;
+  parentTaskTitle?: string;
+  parentTaskSlug?: string;
+  childOrder: number;
+  subtaskCount: number;
+  completedSubtaskCount: number;
+  siblingCount: number;
   deadline: string;
   status: 'open' | 'in_progress' | 'review' | 'completed' | 'cancelled';
   createdAt: string;
@@ -101,6 +110,34 @@ export interface TaskUpdatePayload {
   materialsLink?: string;
 }
 
+export interface TaskProjectDraft {
+  title: string;
+  projectBrief: string;
+  projectSummary?: string;
+  projectRequirements?: string;
+  format: TaskFormat;
+  deadline: string;
+  location?: string;
+  coordinates?: [number, number];
+  attachments?: TaskAttachmentPayload[];
+  materialsLink?: string;
+  subtasks: GeneratedProjectSubtask[];
+}
+
+export interface TaskResponseTeamMember {
+  id: string;
+  responseId: string;
+  taskId: string;
+  studentId: string;
+  studentName: string;
+  role: 'leader' | 'member';
+  university?: string;
+  course?: number;
+  description?: string;
+  skills?: string[];
+  createdAt: string;
+}
+
 export interface TaskResponse {
   id: string;
   taskId: string;
@@ -112,6 +149,19 @@ export interface TaskResponse {
   reviewComment?: string;
   createdAt: string;
   updatedAt: string;
+  teamMembers: TaskResponseTeamMember[];
+}
+
+export interface StudentDirectoryProfile {
+  id: string;
+  name: string;
+  university?: string;
+  course?: number;
+  description?: string;
+  skills?: string[];
+  points: number;
+  completedTasksCount: number;
+  createdAt: string;
 }
 
 export interface Event {
@@ -189,6 +239,15 @@ export interface Notification {
   type?: 'info' | 'success' | 'warning';
 }
 
+export interface PlatformStats {
+  totalStudents: number;
+  totalOrganizations: number;
+  activeTasks: number;
+  completedTasks: number;
+  totalResponses: number;
+  totalPointsAwarded: number;
+}
+
 interface BootstrapPayload {
   tasks: Task[];
   responses: TaskResponse[];
@@ -197,11 +256,14 @@ interface BootstrapPayload {
   products: Product[];
   purchases: Purchase[];
   notifications: Notification[];
+  studentsDirectory: StudentDirectoryProfile[];
+  platformStats: PlatformStats;
 }
 
 interface DataContextType extends BootstrapPayload {
   loading: boolean;
   addTask: (task: TaskDraft) => Promise<void>;
+  publishTaskProject: (task: TaskProjectDraft) => Promise<void>;
   updateTask: (taskId: string, task: TaskUpdatePayload) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
   addEvent: (event: EventDraft) => Promise<void>;
@@ -209,6 +271,8 @@ interface DataContextType extends BootstrapPayload {
   deleteEvent: (eventId: string) => Promise<void>;
   updateTaskStatus: (taskId: string, status: Task['status']) => Promise<void>;
   takeTask: (taskId: string, studentId: string, studentName: string, coverLetter?: string) => Promise<void>;
+  addTeamMember: (responseId: string, studentId: string) => Promise<void>;
+  removeTeamMember: (responseId: string, studentId: string) => Promise<void>;
   submitTask: (responseId: string, submissionLink: string) => Promise<void>;
   reviewTask: (responseId: string, status: 'completed' | 'needs_revision', comment: string) => Promise<void>;
   registerForEvent: (eventId: string) => Promise<void>;
@@ -226,6 +290,15 @@ const EMPTY_STATE: BootstrapPayload = {
   products: [],
   purchases: [],
   notifications: [],
+  studentsDirectory: [],
+  platformStats: {
+    totalStudents: 0,
+    totalOrganizations: 0,
+    activeTasks: 0,
+    completedTasks: 0,
+    totalResponses: 0,
+    totalPointsAwarded: 0,
+  },
 };
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -237,6 +310,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [products, setProducts] = useState<Product[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [studentsDirectory, setStudentsDirectory] = useState<StudentDirectoryProfile[]>([]);
+  const [platformStats, setPlatformStats] = useState<PlatformStats>(EMPTY_STATE.platformStats);
   const [loading, setLoading] = useState(true);
 
   const applyState = (data: BootstrapPayload) => {
@@ -247,6 +322,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProducts(data.products);
     setPurchases(data.purchases);
     setNotifications(data.notifications);
+    setStudentsDirectory(data.studentsDirectory);
+    setPlatformStats(data.platformStats);
   };
 
   const loadData = async () => {
@@ -296,6 +373,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addTask = async (taskData: TaskDraft) => {
     await runMutation(() =>
       apiRequest('/api/tasks', {
+        method: 'POST',
+        body: JSON.stringify(taskData),
+      }),
+    );
+  };
+
+  const publishTaskProject = async (taskData: TaskProjectDraft) => {
+    await runMutation(() =>
+      apiRequest('/api/tasks/project', {
         method: 'POST',
         body: JSON.stringify(taskData),
       }),
@@ -368,6 +454,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  const addTeamMember = async (responseId: string, studentId: string) => {
+    await runMutation(() =>
+      apiRequest(`/api/task-responses/${responseId}/team-members`, {
+        method: 'POST',
+        body: JSON.stringify({ studentId }),
+      }),
+    );
+  };
+
+  const removeTeamMember = async (responseId: string, studentId: string) => {
+    await runMutation(() =>
+      apiRequest(`/api/task-responses/${responseId}/team-members/${studentId}`, {
+        method: 'DELETE',
+      }),
+    );
+  };
+
   const submitTask = async (responseId: string, submissionLink: string) => {
     await runMutation(() =>
       apiRequest(`/api/task-responses/${responseId}/submit`, {
@@ -426,6 +529,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notifications,
         loading,
         addTask,
+        publishTaskProject,
         updateTask,
         deleteTask,
         addEvent,
@@ -433,11 +537,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteEvent,
         updateTaskStatus,
         takeTask,
+        addTeamMember,
+        removeTeamMember,
         submitTask,
         reviewTask,
         registerForEvent,
         buyProduct,
         markNotificationAsRead,
+        studentsDirectory,
+        platformStats,
       }}
     >
       {children}

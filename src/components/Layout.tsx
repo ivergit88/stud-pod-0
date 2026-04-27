@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { LogOut, User, Bell, Briefcase, HelpCircle, LayoutDashboard, PlusCircle, Users, Eye, Calendar } from 'lucide-react';
+import { LogOut, User, Bell, Briefcase, HelpCircle, LayoutDashboard, PlusCircle, Users, Eye, Calendar, Search } from 'lucide-react';
 import {
   AccessibilityPanel,
   applyAccessibilitySettings,
@@ -103,10 +103,18 @@ export const Layout: React.FC = () => {
               </button>
               {user ? (
                 <>
-                  <Link to="/уведомления" className="text-gray-500 hover:text-gray-700 relative p-2">
+                  <Link
+                    to="/уведомления"
+                    className="text-gray-500 hover:text-gray-700 relative p-2"
+                    aria-label={
+                      unreadNotificationsCount > 0
+                        ? `Уведомления, непрочитано: ${unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}`
+                        : 'Уведомления'
+                    }
+                  >
                     <Bell className="h-6 w-6" />
                     {unreadNotificationsCount > 0 && (
-                      <span className="absolute top-1 right-1 flex items-center justify-center h-4 w-4 rounded-full bg-red-500 text-white text-[10px] font-bold ring-2 ring-white">
+                      <span className="a11y-notification-count a11y-force-accent absolute -right-0.5 -top-0.5 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full border border-white bg-red-500 px-1.5 text-[11px] font-extrabold leading-none text-white shadow-sm">
                         {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
                       </span>
                     )}
@@ -150,6 +158,7 @@ export const Layout: React.FC = () => {
                 <>
                   <NavLink to="/студент" icon={<LayoutDashboard />} label="Личный кабинет" activeWhen={(pathname) => pathname === '/студент'} />
                   <NavLink to="/задачи" icon={<Briefcase />} label="Каталог задач" activeWhen={(pathname) => pathname.startsWith('/задачи')} />
+                  <NavLink to="/сокомандники" icon={<Search />} label="Сокомандники" activeWhen={(pathname) => pathname.startsWith('/сокомандники')} />
                   <NavLink to="/портфолио" icon={<User />} label="Моё портфолио" activeWhen={(pathname) => pathname.startsWith('/портфолио')} />
                   <NavLink to="/мероприятия" icon={<Users />} label="Офлайн мероприятия" activeWhen={(pathname) => pathname.startsWith('/мероприятия')} />
                 </>
@@ -188,6 +197,7 @@ export const Layout: React.FC = () => {
               <>
                 <MobileNavLink to="/студент" icon={<LayoutDashboard />} label="Кабинет" activeWhen={(pathname) => pathname === '/студент'} />
                 <MobileNavLink to="/задачи" icon={<Briefcase />} label="Задачи" activeWhen={(pathname) => pathname.startsWith('/задачи')} />
+                <MobileNavLink to="/сокомандники" icon={<Search />} label="Команда" activeWhen={(pathname) => pathname.startsWith('/сокомандники')} />
                 <MobileNavLink to="/портфолио" icon={<User />} label="Портфолио" activeWhen={(pathname) => pathname.startsWith('/портфолио')} />
                 <MobileNavLink to="/мероприятия" icon={<Users />} label="События" activeWhen={(pathname) => pathname.startsWith('/мероприятия')} />
               </>

@@ -26,6 +26,7 @@ export const OrgDashboard: React.FC = () => {
     responses.some((response) => response.taskId === task.id && response.status === 'submitted'),
   );
   const recentTasks = [...orgTasks]
+    .filter((task) => task.taskKind !== 'parent')
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 3);
   const upcomingEvents = [...orgEvents]
@@ -63,7 +64,7 @@ export const OrgDashboard: React.FC = () => {
       </div>
 
       {user.status === 'moderation' && (
-        <div className="a11y-accent-card rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-base font-medium leading-7 text-amber-900">
+        <div className="a11y-org-warning rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-base font-medium leading-7 text-amber-900">
           Заявка организации находится на модерации. В пилотной версии это не мешает работе, а на
           следующем этапе публикации будут подтверждаться администратором вручную.
         </div>
@@ -96,7 +97,7 @@ export const OrgDashboard: React.FC = () => {
         <section className="rounded-3xl border border-gray-100 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
             <h2 className="text-xl font-bold text-gray-900">Последние задачи</h2>
-            <Link to="/организация/задачи" className="text-sm font-medium text-blue-600 hover:text-blue-800">
+            <Link to="/организация/задачи" className="a11y-org-dashboard-link text-sm font-medium text-blue-600 hover:text-blue-800">
               Открыть управление публикациями
             </Link>
           </div>
@@ -108,11 +109,16 @@ export const OrgDashboard: React.FC = () => {
                 return (
                   <div key={task.id} className="p-6">
                     <div className="mb-3 flex flex-wrap gap-2">
-                      <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+                      <span className="a11y-org-badge a11y-force-accent rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
                         {task.category}
                       </span>
+                      {task.parentTaskTitle && (
+                        <span className="a11y-org-badge a11y-force-accent rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                          Часть проекта
+                        </span>
+                      )}
                       <span
-                        className={`rounded-full px-3 py-1 text-xs font-medium ${
+                        className={`a11y-org-badge a11y-force-accent rounded-full px-3 py-1 text-xs font-medium ${
                           task.format === 'online'
                             ? 'bg-blue-50 text-blue-700'
                             : task.format === 'hybrid'
@@ -122,6 +128,20 @@ export const OrgDashboard: React.FC = () => {
                       >
                         {getTaskFormatLabel(task.format)}
                       </span>
+                      <span className="a11y-org-badge a11y-force-accent rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                        {task.status === 'open'
+                          ? 'Опубликована'
+                          : task.status === 'in_progress'
+                            ? 'В работе'
+                            : task.status === 'review'
+                              ? 'На проверке'
+                              : task.status === 'completed'
+                                ? 'Завершена'
+                                : 'Отменена'}
+                      </span>
+                      <span className="a11y-task-points a11y-force-accent rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                        {task.pointsReward} баллов
+                      </span>
                     </div>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
@@ -130,6 +150,11 @@ export const OrgDashboard: React.FC = () => {
                             {task.title}
                           </Link>
                         </h3>
+                        {task.parentTaskTitle && (
+                          <p className="mt-2 text-sm font-medium text-emerald-700">
+                            Проект: {task.parentTaskTitle}
+                          </p>
+                        )}
                         <p className="mt-2 line-clamp-2 text-sm text-gray-600">{task.description}</p>
                       </div>
                       <div className="text-sm text-gray-500">

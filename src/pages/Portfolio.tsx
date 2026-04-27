@@ -6,6 +6,7 @@ import { Award, Briefcase, Calendar, Star, Download } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
 import { getTaskHref } from '../lib/tasks';
+import { isResponseLeader, isStudentInResponse } from '../lib/task-responses';
 
 export const Portfolio: React.FC = () => {
   const { user } = useAuth();
@@ -16,7 +17,9 @@ export const Portfolio: React.FC = () => {
     return <div>Доступ запрещен</div>;
   }
 
-  const completedResponses = responses.filter(r => r.studentId === user.id && r.status === 'completed');
+  const completedResponses = responses.filter(
+    (response) => response.status === 'completed' && isStudentInResponse(response, user.id),
+  );
   
   const portfolioItems = completedResponses.map(r => {
     const task = tasks.find(t => t.id === r.taskId);
@@ -172,7 +175,7 @@ export const Portfolio: React.FC = () => {
                 <p className="text-xs leading-tight text-gray-500 sm:text-sm">Проектов</p>
               </div>
               <div className="min-w-0 rounded-2xl border border-gray-100 bg-gray-50 px-2 py-4">
-                <p className="mb-1 text-2xl font-bold leading-tight text-gray-900 sm:text-3xl">{uniqueOrgs}</p>
+                <p className="mb-1 break-words text-lg font-bold leading-tight text-gray-900 sm:text-2xl">{uniqueOrgs}</p>
                 <p className="break-words text-xs leading-tight text-gray-500 sm:text-sm">Организации</p>
               </div>
               <div className="min-w-0 rounded-2xl border border-gray-100 bg-gray-50 px-2 py-4">
@@ -180,7 +183,7 @@ export const Portfolio: React.FC = () => {
                 <p className="text-xs leading-tight text-gray-500 sm:text-sm">Отзывов</p>
               </div>
               <div className="min-w-0 rounded-2xl border border-gray-100 bg-gray-50 px-2 py-4">
-                <p className="mb-1 text-lg font-bold leading-tight tracking-tight text-gray-900 sm:text-3xl">Топ 10%</p>
+                <p className="mb-1 break-words text-sm font-bold leading-tight tracking-tight text-gray-900 sm:text-xl">Топ 10%</p>
                 <p className="text-xs leading-tight text-gray-500 sm:text-sm">В рейтинге</p>
               </div>
             </div>
@@ -232,6 +235,12 @@ export const Portfolio: React.FC = () => {
                     <div className="flex items-center font-medium text-amber-600">
                       <Star className="w-4 h-4 mr-1.5 fill-current" />
                       +{item.task?.pointsReward} баллов
+                    </div>
+                    <div className="flex items-center">
+                      {isResponseLeader(item, user.id) ? 'Лидер команды' : 'Участник команды'}
+                    </div>
+                    <div className="flex items-center">
+                      Команда: {item.teamMembers.length}
                     </div>
                   </div>
 

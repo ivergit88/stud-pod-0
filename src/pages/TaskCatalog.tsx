@@ -23,6 +23,10 @@ export const TaskCatalog: React.FC = () => {
   ];
 
   const filteredTasks = tasks.filter(task => {
+    if (task.taskKind === 'parent') {
+      return false;
+    }
+
     const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           task.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || task.category === selectedCategory;
@@ -160,6 +164,11 @@ export const TaskCatalog: React.FC = () => {
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                         {task.category}
                       </span>
+                      {task.parentTaskTitle && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
+                          Часть проекта
+                        </span>
+                      )}
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                           task.format === 'online'
@@ -185,6 +194,11 @@ export const TaskCatalog: React.FC = () => {
                   <p className="text-gray-600 text-sm mb-4 line-clamp-3">
                     {task.description}
                   </p>
+                  {task.parentTaskTitle && (
+                    <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                      Относится к проекту: {task.parentTaskTitle}
+                    </div>
+                  )}
                   <div className="space-y-2 text-sm text-gray-500">
                     <div className="flex items-center">
                       <Briefcase className="w-4 h-4 mr-2 flex-shrink-0" />

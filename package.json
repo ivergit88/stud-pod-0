@@ -5,13 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "node --import tsx server.ts",
+    "local": "npm run dev",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "check": "npm run lint",
     "start": "node --import tsx server.ts",
     "start:all": "npm install && npm run dev",
-    "import:firebase": "node --import tsx scripts/import-firebase-export.ts"
+    "import:firebase": "node --import tsx scripts/import-firebase-export.ts",
+    "deploy": "./scripts/deploy-beget.sh",
+    "fetchenv": "./scripts/fetch-beget-env.sh",
+    "domain": "./scripts/configure-beget-domain.sh"
   },
   "dependencies": {
     "@pbe/react-yandex-maps": "^1.2.5",

@@ -106,7 +106,7 @@ export const Help: React.FC = () => {
                     <div className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${msg.role === 'user' ? 'bg-blue-100 ml-3' : 'bg-gray-100 mr-3'}`}>
                       {msg.role === 'user' ? <User className="h-5 w-5 text-blue-600" /> : <Bot className="h-5 w-5 text-gray-600" />}
                     </div>
-                    <div className={`p-3 rounded-2xl ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-gray-100 text-gray-800 rounded-tl-none'}`}>
+                    <div className={`a11y-chat-bubble p-3 rounded-2xl ${msg.role === 'user' ? 'a11y-chat-bubble-user bg-blue-600 text-white rounded-tr-none' : 'a11y-chat-bubble-assistant bg-gray-100 text-gray-800 rounded-tl-none'}`}>
                       <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
                     </div>
                   </div>
@@ -118,7 +118,7 @@ export const Help: React.FC = () => {
                     <div className="flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center bg-gray-100 mr-3">
                       <Bot className="h-5 w-5 text-gray-600" />
                     </div>
-                    <div className="p-3 rounded-2xl bg-gray-100 text-gray-800 rounded-tl-none flex space-x-2 items-center">
+                    <div className="a11y-chat-bubble-assistant p-3 rounded-2xl bg-gray-100 text-gray-800 rounded-tl-none flex space-x-2 items-center">
                       <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
                       <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                       <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>

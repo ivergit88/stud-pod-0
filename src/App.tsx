@@ -27,6 +27,7 @@ import { Notifications } from './pages/Notifications';
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { Help } from './pages/Help';
 import { Terms } from './pages/Terms';
+import { TeamBuilder } from './pages/TeamBuilder';
 
 export default function App() {
   return (
@@ -51,6 +52,7 @@ export default function App() {
               <Route path="организация/мероприятия/:id/редактировать" element={<CreateEvent />} />
               <Route path="организация/задачи/:id" element={<TaskDetails />} />
               <Route path="портфолио" element={<Portfolio />} />
+              <Route path="сокомандники" element={<TeamBuilder />} />
               <Route path="мероприятия" element={<Events />} />
               <Route path="магазин" element={<Store />} />
               <Route path="уведомления" element={<Notifications />} />

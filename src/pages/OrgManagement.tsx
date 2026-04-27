@@ -22,6 +22,42 @@ export const OrgManagement: React.FC = () => {
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [tasks, user.id],
   );
+  const executableTasks = useMemo(
+    () => orgTasks.filter((task) => task.taskKind !== 'parent'),
+    [orgTasks],
+  );
+  const rootTasks = useMemo(
+    () => orgTasks.filter((task) => task.taskKind !== 'subtask'),
+    [orgTasks],
+  );
+  const childTasksByParentId = useMemo(() => {
+    const next = new Map<string, typeof orgTasks>();
+
+    for (const task of orgTasks) {
+      if (!task.parentTaskId) {
+        continue;
+      }
+
+      const current = next.get(task.parentTaskId) || [];
+      current.push(task);
+      next.set(task.parentTaskId, current);
+    }
+
+    for (const [parentId, items] of next.entries()) {
+      next.set(
+        parentId,
+        [...items].sort((a, b) => {
+          if (a.childOrder !== b.childOrder) {
+            return a.childOrder - b.childOrder;
+          }
+
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        }),
+      );
+    }
+
+    return next;
+  }, [orgTasks]);
 
   const orgEvents = useMemo(
     () =>
@@ -97,12 +133,12 @@ export const OrgManagement: React.FC = () => {
       <div className="grid gap-6 md:grid-cols-3">
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
           <div className="text-sm font-medium text-gray-500">Всего задач</div>
-          <div className="mt-2 text-3xl font-bold text-gray-900">{orgTasks.length}</div>
+          <div className="mt-2 text-3xl font-bold text-gray-900">{executableTasks.length}</div>
         </div>
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
           <div className="text-sm font-medium text-gray-500">На проверке</div>
           <div className="mt-2 text-3xl font-bold text-gray-900">
-            {orgTasks.filter((task) => responses.some((response) => response.taskId === task.id && response.status === 'submitted')).length}
+            {executableTasks.filter((task) => responses.some((response) => response.taskId === task.id && response.status === 'submitted')).length}
           </div>
         </div>
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -116,11 +152,13 @@ export const OrgManagement: React.FC = () => {
           <h2 className="text-xl font-bold text-gray-900">Задачи</h2>
         </div>
         <div className="divide-y divide-gray-100">
-          {orgTasks.length > 0 ? (
-            orgTasks.map((task) => {
+          {rootTasks.length > 0 ? (
+            rootTasks.map((task) => {
+              const childTasks = childTasksByParentId.get(task.id) || [];
               const taskResponses = responses.filter((response) => response.taskId === task.id);
-              const canEditTask = task.status === 'open';
-              const canDeleteTask = task.status === 'open' && taskResponses.length === 0;
+              const isProject = task.taskKind === 'parent' || childTasks.length > 0;
+              const canEditTask = task.status === 'open' && task.taskKind !== 'parent';
+              const canDeleteTask = task.status === 'open' && taskResponses.length === 0 && childTasks.length === 0;
               const isDeleting = deletingTaskId === task.id;
 
               return (
@@ -128,11 +166,16 @@ export const OrgManagement: React.FC = () => {
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <div className="mb-3 flex flex-wrap gap-2">
-                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+                        <span className="a11y-org-badge a11y-force-accent rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
                           {task.category}
                         </span>
+                        {isProject && (
+                          <span className="a11y-org-badge a11y-force-accent rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                            Проект с подзадачами
+                          </span>
+                        )}
                         <span
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                          className={`a11y-org-badge a11y-force-accent rounded-full px-3 py-1 text-xs font-medium ${
                             task.format === 'online'
                               ? 'bg-blue-50 text-blue-700'
                               : task.format === 'hybrid'
@@ -142,7 +185,7 @@ export const OrgManagement: React.FC = () => {
                         >
                           {getTaskFormatLabel(task.format)}
                         </span>
-                        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                        <span className="a11y-org-badge a11y-force-accent rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
                           {task.status === 'open'
                             ? 'Опубликована'
                             : task.status === 'in_progress'
@@ -153,6 +196,9 @@ export const OrgManagement: React.FC = () => {
                                   ? 'Завершена'
                                   : 'Отменена'}
                         </span>
+                        <span className="a11y-task-points a11y-force-accent rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                          {isProject ? `${task.pointsReward} баллов суммарно` : `${task.pointsReward} баллов`}
+                        </span>
                       </div>
                       <h3 className="text-lg font-semibold text-gray-900">
                         <Link to={`/организация/задачи/${task.id}`} className="hover:text-blue-600">
@@ -160,10 +206,24 @@ export const OrgManagement: React.FC = () => {
                         </Link>
                       </h3>
                       <p className="mt-2 line-clamp-2 text-sm text-gray-600">{task.description}</p>
-                      <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-500">
-                        <span>Откликов: {taskResponses.length}</span>
-                        <span>Дедлайн: {new Date(task.deadline).toLocaleDateString('ru-RU')}</span>
-                        <span>Баллы: {task.pointsReward}</span>
+                      <div className="mt-4 flex flex-wrap gap-2 text-sm text-gray-500">
+                        {isProject ? (
+                          <>
+                            <span className="a11y-task-chip a11y-force-accent rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                              Подзадач: {childTasks.length}
+                            </span>
+                            <span className="a11y-task-chip a11y-force-accent rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                              Завершено: {childTasks.filter((item) => item.status === 'completed').length}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="a11y-task-chip a11y-force-accent rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                            Откликов: {taskResponses.length}
+                          </span>
+                        )}
+                        <span className="a11y-task-chip a11y-force-accent rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                          Дедлайн: {new Date(task.deadline).toLocaleDateString('ru-RU')}
+                        </span>
                       </div>
                     </div>
 
@@ -196,6 +256,75 @@ export const OrgManagement: React.FC = () => {
                       </Link>
                     </div>
                   </div>
+
+                  {childTasks.length > 0 && (
+                    <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                      <div className="mb-3 text-sm font-semibold text-gray-900">Подзадачи проекта</div>
+                      <div className="space-y-3">
+                        {childTasks.map((childTask) => {
+                          const childResponsesCount = responses.filter(
+                            (response) => response.taskId === childTask.id,
+                          ).length;
+
+                          return (
+                            <div
+                              key={childTask.id}
+                              className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-4 md:flex-row md:items-start md:justify-between"
+                            >
+                              <div className="min-w-0">
+                                <Link
+                                  to={`/организация/задачи/${childTask.id}`}
+                                  className="text-sm font-semibold text-gray-900 hover:text-blue-600"
+                                >
+                                  {childTask.title}
+                                </Link>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <span className="a11y-org-badge a11y-force-accent rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+                                    {childTask.category}
+                                  </span>
+                                  <span className="a11y-org-badge a11y-force-accent rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                                    {childTask.status === 'open'
+                                      ? 'Опубликована'
+                                      : childTask.status === 'in_progress'
+                                        ? 'В работе'
+                                        : childTask.status === 'review'
+                                          ? 'На проверке'
+                                          : childTask.status === 'completed'
+                                            ? 'Завершена'
+                                            : 'Отменена'}
+                                  </span>
+                                  <span className="a11y-task-points a11y-force-accent rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                                    {childTask.pointsReward} баллов
+                                  </span>
+                                </div>
+                                <div className="mt-2 text-xs text-gray-500">
+                                  Откликов: {childResponsesCount} • Дедлайн: {new Date(childTask.deadline).toLocaleDateString('ru-RU')}
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                {childTask.status === 'open' && (
+                                  <Link
+                                    to={`/организация/задачи/${childTask.id}/редактировать`}
+                                    className="inline-flex items-center rounded-xl bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                                  >
+                                    <Pencil className="mr-2 h-4 w-4" />
+                                    Изменить
+                                  </Link>
+                                )}
+                                <Link
+                                  to={`/организация/задачи/${childTask.id}`}
+                                  className="inline-flex items-center rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                                >
+                                  Открыть
+                                </Link>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })

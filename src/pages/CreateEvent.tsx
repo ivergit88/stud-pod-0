@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 
 const EVENT_POINTS_MIN = 10;
-const EVENT_POINTS_MAX = 200;
+const EVENT_POINTS_MAX = 80;
 
 const toDateTimeLocalValue = (value: string) => {
   if (!value) {
@@ -57,7 +57,10 @@ export const CreateEvent: React.FC = () => {
       date: toDateTimeLocalValue(existingEvent.date),
       location: existingEvent.location,
       coordinates: existingEvent.coordinates,
-      pointsReward: existingEvent.pointsReward,
+      pointsReward: Math.min(
+        EVENT_POINTS_MAX,
+        Math.max(EVENT_POINTS_MIN, existingEvent.pointsReward),
+      ),
       imageUrl: existingEvent.imageUrl || '',
     });
   }, [existingEvent]);
@@ -218,6 +221,12 @@ export const CreateEvent: React.FC = () => {
             </div>
           </div>
 
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 px-5 py-4 text-sm text-gray-700">
+            Для мероприятий действует более узкий диапазон, чем для задач. Логика такая: задача
+            даёт баллы за готовый измеримый результат, а мероприятие - за участие и вовлечение.
+            Поэтому верхняя граница здесь ниже и не конкурирует с полноценными ТЗ.
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Место проведения *
@@ -273,18 +282,18 @@ export const CreateEvent: React.FC = () => {
             определить. Для этого мы сохраняем и текст адреса, и координаты.
           </div>
 
-          <div className="pt-4 border-t border-gray-100 flex justify-end space-x-4">
+          <div className="flex flex-col-reverse gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={() => navigate('/мероприятия')}
-              className="px-6 py-3 border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              className="w-full rounded-xl border border-gray-300 px-6 py-3 text-center font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:w-auto"
             >
               Отмена
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-6 py-3 bg-blue-700 text-white rounded-xl font-medium hover:bg-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full rounded-xl bg-blue-700 px-6 py-3 text-center font-medium text-white transition-colors hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               {isSubmitting
                 ? isEditMode

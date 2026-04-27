@@ -71,6 +71,9 @@ async function createDb() {
       pointsRecommended INTEGER,
       pointsMax INTEGER,
       pointsExplanation TEXT,
+      taskKind TEXT DEFAULT 'single',
+      parentTaskId TEXT,
+      childOrder INTEGER DEFAULT 0,
       deadline TEXT NOT NULL,
       status TEXT NOT NULL,
       location TEXT,
@@ -92,6 +95,23 @@ async function createDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (taskId) REFERENCES tasks(id),
       FOREIGN KEY (studentId) REFERENCES users(id)
+    )
+  `);
+
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS task_response_members (
+      id TEXT PRIMARY KEY,
+      responseId TEXT NOT NULL,
+      taskId TEXT NOT NULL,
+      studentId TEXT NOT NULL,
+      studentName TEXT NOT NULL,
+      role TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (responseId) REFERENCES task_responses(id),
+      FOREIGN KEY (taskId) REFERENCES tasks(id),
+      FOREIGN KEY (studentId) REFERENCES users(id),
+      UNIQUE (responseId, studentId),
+      UNIQUE (taskId, studentId)
     )
   `);
 
@@ -185,6 +205,9 @@ async function createDb() {
   await ensureColumn(db, 'tasks', 'pointsRecommended', 'INTEGER');
   await ensureColumn(db, 'tasks', 'pointsMax', 'INTEGER');
   await ensureColumn(db, 'tasks', 'pointsExplanation', 'TEXT');
+  await ensureColumn(db, 'tasks', 'taskKind', "TEXT DEFAULT 'single'");
+  await ensureColumn(db, 'tasks', 'parentTaskId', 'TEXT');
+  await ensureColumn(db, 'tasks', 'childOrder', 'INTEGER DEFAULT 0');
 
   await ensureColumn(db, 'task_responses', 'reviewComment', 'TEXT');
   await ensureColumn(db, 'task_responses', 'updated_at', 'DATETIME');
@@ -197,13 +220,37 @@ async function createDb() {
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     CREATE INDEX IF NOT EXISTS idx_tasks_org ON tasks(organizationId);
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parentTaskId);
+    CREATE INDEX IF NOT EXISTS idx_tasks_kind ON tasks(taskKind);
     CREATE INDEX IF NOT EXISTS idx_task_responses_task ON task_responses(taskId);
     CREATE INDEX IF NOT EXISTS idx_task_responses_student ON task_responses(studentId);
+    CREATE INDEX IF NOT EXISTS idx_task_response_members_response ON task_response_members(responseId);
+    CREATE INDEX IF NOT EXISTS idx_task_response_members_task_student ON task_response_members(taskId, studentId);
+    CREATE INDEX IF NOT EXISTS idx_task_response_members_student ON task_response_members(studentId);
     CREATE INDEX IF NOT EXISTS idx_events_org ON events(organizationId);
     CREATE INDEX IF NOT EXISTS idx_event_registrations_event ON event_registrations(eventId);
     CREATE INDEX IF NOT EXISTS idx_event_registrations_student ON event_registrations(studentId);
     CREATE INDEX IF NOT EXISTS idx_purchases_student ON purchases(studentId);
     CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(userId);
+  `);
+
+  await db.exec(`
+    INSERT INTO task_response_members (id, responseId, taskId, studentId, studentName, role, created_at)
+    SELECT
+      lower(hex(randomblob(16))),
+      tr.id,
+      tr.taskId,
+      tr.studentId,
+      tr.studentName,
+      'leader',
+      COALESCE(tr.created_at, CURRENT_TIMESTAMP)
+    FROM task_responses tr
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM task_response_members trm
+      WHERE trm.responseId = tr.id
+        AND trm.studentId = tr.studentId
+    )
   `);
 
   return db;

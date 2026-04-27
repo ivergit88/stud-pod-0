@@ -21,6 +21,11 @@ import {
   normalizeTaskWorkload,
   type TaskType,
 } from './src/lib/task-scoring';
+import {
+  buildFallbackProjectPlan,
+  type GeneratedProjectPlan,
+  type GeneratedProjectSubtask,
+} from './src/lib/task-projects';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,16 +47,36 @@ const uploadsRoot = process.env.UPLOADS_DIR
 const TASK_ATTACHMENTS_DIR = 'task-materials';
 const MAX_TASK_ATTACHMENT_COUNT = 3;
 const MAX_TASK_ATTACHMENT_SIZE = 5 * 1024 * 1024;
+const MAX_TASK_TEAM_SIZE = 5;
 const EVENT_POINTS_MIN = 10;
-const EVENT_POINTS_MAX = 200;
+const EVENT_POINTS_MAX = 80;
 const OTHER_SKILL_PLACEHOLDER = 'Другое (укажите)';
 const TASK_FORMATS = new Set(['online', 'hybrid', 'offline']);
 const TASK_SELECT_FIELDS = `
   SELECT
     t.*,
-    u.address AS organizationAddress
+    u.address AS organizationAddress,
+    parent.title AS parentTaskTitle,
+    parent.slug AS parentTaskSlug,
+    (
+      SELECT COUNT(*)
+      FROM tasks child
+      WHERE child.parentTaskId = t.id
+    ) AS subtaskCount,
+    (
+      SELECT COUNT(*)
+      FROM tasks child
+      WHERE child.parentTaskId = t.id
+        AND child.status = 'completed'
+    ) AS completedSubtaskCount,
+    (
+      SELECT COUNT(*)
+      FROM tasks sibling
+      WHERE sibling.parentTaskId = t.parentTaskId
+    ) AS siblingCount
   FROM tasks t
   LEFT JOIN users u ON u.id = t.organizationId
+  LEFT JOIN tasks parent ON parent.id = t.parentTaskId
 `;
 const EVENT_SELECT_FIELDS = `
   SELECT
@@ -123,6 +148,89 @@ interface StoredTaskAttachment {
 }
 
 type TaskFormat = 'online' | 'hybrid' | 'offline';
+type TaskKind = 'single' | 'parent' | 'subtask';
+
+type TaskResponseMemberRole = 'leader' | 'member';
+
+interface TaskResponseMember {
+  id: string;
+  responseId: string;
+  taskId: string;
+  studentId: string;
+  studentName: string;
+  role: TaskResponseMemberRole;
+  university?: string;
+  course?: number;
+  description?: string;
+  skills?: string[];
+  createdAt: string;
+}
+
+interface StudentDirectoryProfile {
+  id: string;
+  name: string;
+  university?: string;
+  course?: number;
+  description?: string;
+  skills?: string[];
+  points: number;
+  completedTasksCount: number;
+  createdAt: string;
+}
+
+interface PlatformStats {
+  totalStudents: number;
+  totalOrganizations: number;
+  activeTasks: number;
+  completedTasks: number;
+  totalResponses: number;
+  totalPointsAwarded: number;
+}
+
+interface TaskInsertInput {
+  id: string;
+  title: string;
+  description: string;
+  requirements: string;
+  organizationId: string;
+  organizationName: string;
+  category: string;
+  format: TaskFormat;
+  workload: ReturnType<typeof normalizeTaskWorkload>;
+  taskType: TaskType;
+  urgency: ReturnType<typeof normalizeTaskUrgency>;
+  requiresOrgMaterials: boolean;
+  requiresOnsiteCheck: boolean;
+  slug: string;
+  pointsReward: number;
+  pointsMin: number;
+  pointsRecommended: number;
+  pointsMax: number;
+  pointsExplanation: string[];
+  taskKind: TaskKind;
+  parentTaskId?: string;
+  childOrder?: number;
+  deadline: string;
+  status: string;
+  location: string;
+  attachments: StoredTaskAttachment[];
+  materialsLink: string;
+  createdAt: string;
+}
+
+interface TaskProjectDraftPayload {
+  title: string;
+  projectBrief: string;
+  projectSummary?: string;
+  projectRequirements?: string;
+  format?: TaskFormat;
+  deadline: string;
+  location?: string;
+  coordinates?: [number, number];
+  attachments?: unknown;
+  materialsLink?: string;
+  subtasks?: GeneratedProjectSubtask[];
+}
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'change-me-before-production';
@@ -213,6 +321,10 @@ function parseBooleanFlag(value: unknown) {
   return false;
 }
 
+function buildSqlPlaceholders(count: number) {
+  return Array.from({ length: count }, () => '?').join(', ');
+}
+
 function slugifyTaskTitle(value: string) {
   return value
     .toLowerCase()
@@ -246,6 +358,10 @@ function taskPublicPath(task: { id: string; slug?: string | null }) {
   return `/задачи/${task.slug || task.id}`;
 }
 
+function buildTaskAttachmentDownloadUrl(taskId: string, attachmentId: string) {
+  return `/api/tasks/${taskId}/attachments/${attachmentId}/download`;
+}
+
 function buildTaskScoringInput(task: Partial<DbRow>) {
   const taskType = task.taskType
     ? normalizeTaskType(String(task.taskType))
@@ -264,6 +380,166 @@ function buildTaskScoringInput(task: Partial<DbRow>) {
         ? parseBooleanFlag(task.requiresOnsiteCheck)
         : normalizeTaskFormat(task.format) !== 'online',
   };
+}
+
+function normalizeTaskKind(value?: string | null): TaskKind {
+  if (value === 'parent' || value === 'subtask') {
+    return value;
+  }
+
+  return 'single';
+}
+
+async function insertTaskRecord(input: TaskInsertInput) {
+  const db = await initDb();
+
+  await db.run(
+    `
+      INSERT INTO tasks (
+        id, title, description, requirements, organizationId, organizationName,
+        category, format, workload, taskType, urgency, requiresOrgMaterials, requiresOnsiteCheck,
+        slug, pointsReward, pointsMin, pointsRecommended, pointsMax, pointsExplanation,
+        taskKind, parentTaskId, childOrder,
+        deadline, status, location, attachments, materialsLink, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      input.id,
+      input.title,
+      input.description,
+      input.requirements,
+      input.organizationId,
+      input.organizationName,
+      input.category,
+      input.format,
+      input.workload,
+      input.taskType,
+      input.urgency,
+      input.requiresOrgMaterials ? 1 : 0,
+      input.requiresOnsiteCheck ? 1 : 0,
+      input.slug,
+      input.pointsReward,
+      input.pointsMin,
+      input.pointsRecommended,
+      input.pointsMax,
+      JSON.stringify(input.pointsExplanation),
+      input.taskKind,
+      input.parentTaskId || null,
+      Number(input.childOrder || 0),
+      input.deadline,
+      input.status,
+      input.location,
+      JSON.stringify(input.attachments),
+      input.materialsLink,
+      input.createdAt,
+    ],
+  );
+}
+
+function buildProjectRequirementsText(parts: Array<string | undefined>) {
+  return parts
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+async function calculateSuggestedTaskPoints(
+  organizationId: string,
+  subtask: Pick<
+    GeneratedProjectSubtask,
+    | 'format'
+    | 'workload'
+    | 'taskType'
+    | 'urgency'
+    | 'requiresOrgMaterials'
+    | 'requiresOnsiteCheck'
+  >,
+) {
+  const trustProfile = await getOrganizationTrustProfile(organizationId);
+  const scoringPreview = calculateTaskScorePreview(
+    {
+      format: subtask.format,
+      workload: normalizeTaskWorkload(subtask.workload),
+      taskType: normalizeTaskType(subtask.taskType),
+      urgency: normalizeTaskUrgency(subtask.urgency),
+      requiresOrgMaterials: Boolean(subtask.requiresOrgMaterials),
+      requiresOnsiteCheck: Boolean(subtask.requiresOnsiteCheck),
+    },
+    trustProfile,
+  );
+
+  return {
+    pointsReward: Math.min(scoringPreview.recommended, scoringPreview.allowedMaximum),
+    pointsMin: scoringPreview.minimum,
+    pointsRecommended: scoringPreview.recommended,
+    pointsMax: scoringPreview.maximum,
+    pointsExplanation: scoringPreview.explanation,
+  };
+}
+
+function normalizeGeneratedSubtask(
+  subtask: Partial<GeneratedProjectSubtask>,
+  baseFormat: TaskFormat,
+  baseDeadline: string,
+  baseLocation: string,
+): GeneratedProjectSubtask {
+  const format = normalizeTaskFormat(subtask.format || baseFormat);
+  const workload = normalizeTaskWorkload(subtask.workload);
+  const taskType = normalizeTaskType(subtask.taskType);
+  const urgency = normalizeTaskUrgency(subtask.urgency);
+  const requiresOrgMaterials = parseBooleanFlag(subtask.requiresOrgMaterials);
+  const requiresOnsiteCheck = format === 'online' ? false : true;
+
+  return {
+    title: String(subtask.title || 'Подзадача').trim(),
+    description: String(subtask.description || '').trim(),
+    requirements: String(subtask.requirements || '').trim(),
+    taskType,
+    workload,
+    urgency,
+    requiresOrgMaterials,
+    requiresOnsiteCheck,
+    studentProfile: String(subtask.studentProfile || '').trim(),
+    deliverable: String(subtask.deliverable || '').trim(),
+    deadline: String(subtask.deadline || baseDeadline).trim(),
+    format,
+    location: format === 'online' ? '' : String(subtask.location || baseLocation).trim(),
+    pointsReward: Number(subtask.pointsReward || 0),
+  };
+}
+
+async function syncParentTaskStatus(parentTaskId?: string | null) {
+  if (!parentTaskId) {
+    return;
+  }
+
+  const db = await initDb();
+  const childRows = await db.all<{ status: string }[]>(
+    'SELECT status FROM tasks WHERE parentTaskId = ? ORDER BY childOrder ASC, datetime(created_at) ASC',
+    parentTaskId,
+  );
+
+  if (childRows.length === 0) {
+    return;
+  }
+
+  const statuses = childRows.map((row) => String(row.status || 'open'));
+  let nextStatus = 'open';
+
+  if (statuses.every((status) => status === 'completed')) {
+    nextStatus = 'completed';
+  } else if (statuses.some((status) => status === 'review')) {
+    nextStatus = 'review';
+  } else if (statuses.every((status) => status === 'cancelled')) {
+    nextStatus = 'cancelled';
+  } else if (
+    statuses.some((status) => status === 'in_progress' || status === 'completed' || status === 'cancelled')
+  ) {
+    nextStatus = 'in_progress';
+  }
+
+  await db.run('UPDATE tasks SET status = ? WHERE id = ?', nextStatus, parentTaskId);
 }
 
 function toUploadUrl(relativePath: string) {
@@ -477,6 +753,10 @@ function mapUser(row?: DbRow | null): CurrentUser | null {
 function mapTask(row: DbRow) {
   const scoringInput = buildTaskScoringInput(row);
   const explanation = parseStringArray(row.pointsExplanation);
+  const attachments = parseTaskAttachments(row.attachments).map((attachment) => ({
+    ...attachment,
+    url: buildTaskAttachmentDownloadUrl(row.id, attachment.id),
+  }));
 
   return {
     id: row.id,
@@ -499,18 +779,42 @@ function mapTask(row: DbRow) {
     pointsRecommended: Number(row.pointsRecommended || row.pointsReward || 0),
     pointsMax: Number(row.pointsMax || row.pointsReward || 0),
     pointsExplanation: explanation,
+    taskKind: normalizeTaskKind(row.taskKind),
+    parentTaskId: row.parentTaskId || undefined,
+    parentTaskTitle: row.parentTaskTitle || undefined,
+    parentTaskSlug: row.parentTaskSlug || undefined,
+    childOrder: Number(row.childOrder || 0),
+    subtaskCount: Number(row.subtaskCount || 0),
+    completedSubtaskCount: Number(row.completedSubtaskCount || 0),
+    siblingCount: Number(row.siblingCount || 0),
     deadline: row.deadline,
     status: row.status,
     createdAt: normalizeDate(row.created_at),
     executorId: row.executorId || undefined,
     location: row.location || undefined,
     coordinates: parseCoordinates(row.coordinates),
-    attachments: parseTaskAttachments(row.attachments),
+    attachments,
     materialsLink: row.materialsLink || '',
   };
 }
 
-function mapTaskResponse(row: DbRow) {
+function mapTaskResponseMember(row: DbRow): TaskResponseMember {
+  return {
+    id: row.id,
+    responseId: row.responseId,
+    taskId: row.taskId,
+    studentId: row.studentId,
+    studentName: row.studentName,
+    role: row.role === 'member' ? 'member' : 'leader',
+    university: row.university || '',
+    course: row.course ? Number(row.course) : undefined,
+    description: row.description || '',
+    skills: parseSkills(row.skills),
+    createdAt: normalizeDate(row.created_at),
+  };
+}
+
+function mapTaskResponse(row: DbRow, teamMembers: TaskResponseMember[] = []) {
   return {
     id: row.id,
     taskId: row.taskId,
@@ -522,6 +826,24 @@ function mapTaskResponse(row: DbRow) {
     reviewComment: row.reviewComment || '',
     createdAt: normalizeDate(row.created_at),
     updatedAt: normalizeDate(row.updated_at || row.created_at),
+    teamMembers,
+  };
+}
+
+function mapStudentDirectoryProfile(row: DbRow): StudentDirectoryProfile {
+  return {
+    id: row.id,
+    name:
+      row.name ||
+      [row.firstName, row.lastName].filter(Boolean).join(' ').trim() ||
+      'Студент',
+    university: row.university || '',
+    course: row.course ? Number(row.course) : undefined,
+    description: row.description || '',
+    skills: parseSkills(row.skills),
+    points: Number(row.points || 0),
+    completedTasksCount: Number(row.completedTasksCount || 0),
+    createdAt: normalizeDate(row.created_at),
   };
 }
 
@@ -652,6 +974,88 @@ async function getOrganizationTrustProfile(organizationId: string) {
   );
 }
 
+async function getPlatformStats(): Promise<PlatformStats> {
+  const db = await initDb();
+  const [
+    studentsRow,
+    organizationsRow,
+    activeTasksRow,
+    completedTasksRow,
+    responsesRow,
+    pointsRow,
+  ] = await Promise.all([
+    db.get<{ count: number }>('SELECT COUNT(*) as count FROM users WHERE role = ?', 'student'),
+    db.get<{ count: number }>('SELECT COUNT(*) as count FROM users WHERE role = ?', 'organization'),
+    db.get<{ count: number }>(
+      "SELECT COUNT(*) as count FROM tasks WHERE COALESCE(taskKind, 'single') != 'parent' AND status IN ('open', 'in_progress', 'review')",
+    ),
+    db.get<{ count: number }>(
+      "SELECT COUNT(*) as count FROM tasks WHERE COALESCE(taskKind, 'single') != 'parent' AND status = ?",
+      'completed',
+    ),
+    db.get<{ count: number }>('SELECT COUNT(*) as count FROM task_responses'),
+    db.get<{ total: number }>(
+      "SELECT COALESCE(SUM(points), 0) as total FROM users WHERE role = 'student'",
+    ),
+  ]);
+
+  return {
+    totalStudents: Number(studentsRow?.count || 0),
+    totalOrganizations: Number(organizationsRow?.count || 0),
+    activeTasks: Number(activeTasksRow?.count || 0),
+    completedTasks: Number(completedTasksRow?.count || 0),
+    totalResponses: Number(responsesRow?.count || 0),
+    totalPointsAwarded: Number(pointsRow?.total || 0),
+  };
+}
+
+async function getTaskResponseMembersMap(responseIds: string[]) {
+  const membersMap = new Map<string, TaskResponseMember[]>();
+
+  if (responseIds.length === 0) {
+    return membersMap;
+  }
+
+  const db = await initDb();
+  const placeholders = buildSqlPlaceholders(responseIds.length);
+  const memberRows = await db.all<DbRow[]>(
+    `
+      SELECT
+        trm.*,
+        u.university,
+        u.course,
+        u.description,
+        u.skills
+      FROM task_response_members trm
+      LEFT JOIN users u ON u.id = trm.studentId
+      WHERE trm.responseId IN (${placeholders})
+      ORDER BY
+        CASE trm.role WHEN 'leader' THEN 0 ELSE 1 END,
+        trm.created_at ASC,
+        trm.studentName COLLATE NOCASE ASC
+    `,
+    ...responseIds,
+  );
+
+  for (const row of memberRows) {
+    const member = mapTaskResponseMember(row);
+    const list = membersMap.get(member.responseId) || [];
+    list.push(member);
+    membersMap.set(member.responseId, list);
+  }
+
+  return membersMap;
+}
+
+async function getTaskResponseMembers(responseId: string) {
+  const membersMap = await getTaskResponseMembersMap([responseId]);
+  return membersMap.get(responseId) || [];
+}
+
+function canManageTaskResponseTeam(status?: string | null) {
+  return status === 'accepted' || status === 'pending' || status === 'needs_revision';
+}
+
 async function ensureUpcomingDeadlineNotifications(studentId: string) {
   const db = await initDb();
   const activeResponses = await db.all<DbRow[]>(
@@ -663,10 +1067,12 @@ async function ensureUpcomingDeadlineNotifications(studentId: string) {
         t.title,
         t.deadline
       FROM task_responses tr
+      INNER JOIN task_response_members trm ON trm.responseId = tr.id
       INNER JOIN tasks t ON t.id = tr.taskId
-      WHERE tr.studentId = ?
+      WHERE trm.studentId = ?
         AND tr.status IN ('pending', 'accepted', 'submitted', 'needs_revision')
         AND t.status IN ('open', 'in_progress', 'review')
+      GROUP BY tr.id
     `,
     studentId,
   );
@@ -812,6 +1218,87 @@ function extractJsonObject(rawText: string) {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
+async function generateProjectPlanWithAi(
+  payload: TaskProjectDraftPayload,
+): Promise<GeneratedProjectPlan> {
+  const fallbackPlan = buildFallbackProjectPlan({
+    projectTitle: payload.title,
+    projectBrief: payload.projectBrief,
+    desiredResult: payload.projectSummary,
+    sourceMaterials: buildProjectRequirementsText([
+      payload.projectRequirements,
+      String(payload.materialsLink || '').trim(),
+    ]),
+    deadline: payload.deadline,
+    format: payload.format,
+    location: payload.location,
+  });
+
+  try {
+    const reply = await callYandexGpt([
+      {
+        role: 'system',
+        text:
+          'Ты - аналитик цифровой платформы "Студенческий подряд". Нужно разложить одну крупную задачу учреждения на 3-6 независимых мини-задач для студентов. Каждая мини-задача должна иметь самостоятельный проверяемый результат и не должна выглядеть как полноценный коммерческий заказ целиком. Старайся держать уровень входа умеренным: подзадачи должны подходить начинающим студентам при наличии цифровых инструментов. Верни строго JSON без markdown. Формат: {"summary":"...","rationale":"...","subtasks":[{"title":"...","description":"...","requirements":"...","taskType":"content|design|website|bot|digitization|3d|setup|analytics|other","workload":"up_to_3_hours|one_day|two_to_three_days|more_than_three_days","urgency":"normal|urgent","requiresOrgMaterials":true,"requiresOnsiteCheck":false,"studentProfile":"...","deliverable":"..."}]}',
+      },
+      {
+        role: 'user',
+        text: [
+          `Название проекта: ${String(payload.title || '').trim()}`,
+          `Большая задача: ${String(payload.projectBrief || '').trim()}`,
+          payload.projectSummary
+            ? `Ожидаемый результат: ${String(payload.projectSummary).trim()}`
+            : '',
+          payload.projectRequirements
+            ? `Ограничения и пожелания: ${String(payload.projectRequirements).trim()}`
+            : '',
+          payload.format ? `Формат: ${payload.format}` : '',
+          payload.deadline ? `Дедлайн: ${payload.deadline}` : '',
+          payload.location ? `Место: ${payload.location}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      },
+    ]);
+
+    if (!reply) {
+      return fallbackPlan;
+    }
+
+    const parsed = extractJsonObject(reply);
+    const rawSubtasks = Array.isArray(parsed.subtasks) ? parsed.subtasks : [];
+    const subtasks = rawSubtasks
+      .map((item) =>
+        normalizeGeneratedSubtask(
+          item,
+          normalizeTaskFormat(payload.format),
+          String(payload.deadline || '').trim(),
+          String(payload.location || '').trim(),
+        ),
+      )
+      .filter(
+        (item) =>
+          item.title &&
+          item.description &&
+          item.requirements,
+      )
+      .slice(0, 6);
+
+    if (subtasks.length < 2) {
+      return fallbackPlan;
+    }
+
+    return {
+      summary: String(parsed.summary || fallbackPlan.summary).trim(),
+      rationale: String(parsed.rationale || fallbackPlan.rationale).trim(),
+      subtasks,
+    };
+  } catch (error) {
+    console.error('Project breakdown AI fallback:', error);
+    return fallbackPlan;
+  }
+}
+
 async function attachCurrentUser(
   req: AuthenticatedRequest,
   _res: Response,
@@ -871,7 +1358,7 @@ app.use(
     fallthrough: false,
     setHeaders(res, filePath) {
       res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Content-Disposition', `attachment; filename="${path.basename(filePath)}"`);
+      res.setHeader('Content-Disposition', 'attachment');
     },
   }),
 );
@@ -882,6 +1369,38 @@ app.get('/api/health', async (_req, res) => {
   const db = await initDb();
   await db.get('SELECT 1');
   res.json({ status: 'ok' });
+});
+
+app.get('/api/tasks/:taskId/attachments/:attachmentId/download', async (req, res) => {
+  try {
+    const task = await getTaskRowById(req.params.taskId);
+
+    if (!task) {
+      return sendError(res, 404, 'Задача не найдена');
+    }
+
+    const attachment = parseTaskAttachments(task.attachments).find(
+      (item) => item.id === req.params.attachmentId,
+    );
+
+    if (!attachment) {
+      return sendError(res, 404, 'Файл не найден');
+    }
+
+    const filePath = resolveRelativeUploadPath(attachment.relativePath);
+
+    try {
+      await fs.access(filePath);
+    } catch {
+      return sendError(res, 404, 'Файл не найден');
+    }
+
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.download(filePath, attachment.originalName);
+  } catch (error) {
+    console.error('Task attachment download error:', error);
+    return sendError(res, 500, 'Не удалось скачать файл');
+  }
 });
 
 app.get('/api/auth/me', (req: AuthenticatedRequest, res) => {
@@ -1082,7 +1601,13 @@ app.get('/api/bootstrap', async (req: AuthenticatedRequest, res) => {
     let responseRows: DbRow[] = [];
     if (user?.role === 'student') {
       responseRows = await db.all(
-        'SELECT * FROM task_responses WHERE studentId = ? ORDER BY datetime(created_at) DESC',
+        `
+          SELECT DISTINCT tr.*
+          FROM task_responses tr
+          INNER JOIN task_response_members trm ON trm.responseId = tr.id
+          WHERE trm.studentId = ?
+          ORDER BY datetime(tr.created_at) DESC
+        `,
         user.id,
       );
     } else if (user?.role === 'organization') {
@@ -1102,12 +1627,18 @@ app.get('/api/bootstrap', async (req: AuthenticatedRequest, res) => {
       );
     }
 
+    const responseMembersByResponseId = await getTaskResponseMembersMap(
+      responseRows.map((row) => String(row.id)),
+    );
+    const platformStats = await getPlatformStats();
+
     const eventRows = await db.all(`${EVENT_SELECT_FIELDS} GROUP BY e.id ORDER BY datetime(e.date) ASC`);
     const productRows = await db.all('SELECT * FROM products ORDER BY datetime(created_at) DESC');
 
     let eventRegistrationRows: DbRow[] = [];
     let purchaseRows: DbRow[] = [];
     let notificationRows: DbRow[] = [];
+    let studentDirectoryRows: DbRow[] = [];
 
     if (user?.role === 'student') {
       await ensureUpcomingDeadlineNotifications(user.id);
@@ -1118,6 +1649,19 @@ app.get('/api/bootstrap', async (req: AuthenticatedRequest, res) => {
       purchaseRows = await db.all(
         'SELECT * FROM purchases WHERE studentId = ? ORDER BY datetime(created_at) DESC',
         user.id,
+      );
+      studentDirectoryRows = await db.all(
+        `
+          SELECT
+            u.*,
+            COUNT(DISTINCT CASE WHEN tr.status = 'completed' THEN tr.id END) AS completedTasksCount
+          FROM users u
+          LEFT JOIN task_response_members trm ON trm.studentId = u.id
+          LEFT JOIN task_responses tr ON tr.id = trm.responseId
+          WHERE u.role = 'student'
+          GROUP BY u.id
+          ORDER BY COALESCE(u.points, 0) DESC, datetime(u.created_at) DESC
+        `,
       );
     }
 
@@ -1130,12 +1674,16 @@ app.get('/api/bootstrap', async (req: AuthenticatedRequest, res) => {
 
     return res.json({
       tasks: taskRows.map(mapTask),
-      responses: responseRows.map(mapTaskResponse),
+      responses: responseRows.map((row) =>
+        mapTaskResponse(row, responseMembersByResponseId.get(String(row.id)) || []),
+      ),
       events: eventRows.map(mapEvent),
       eventRegistrations: eventRegistrationRows.map(mapEventRegistration),
       products: productRows.map(mapProduct),
       purchases: purchaseRows.map(mapPurchase),
       notifications: notificationRows.map(mapNotification),
+      studentsDirectory: studentDirectoryRows.map(mapStudentDirectoryProfile),
+      platformStats,
     });
   } catch (error) {
     console.error('Bootstrap error:', error);
@@ -1218,6 +1766,237 @@ app.post('/api/ai/task-brief', requireRole(['organization', 'admin']), async (re
   }
 });
 
+app.post('/api/ai/task-breakdown', requireRole(['organization', 'admin']), async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = req.currentUser!;
+    const {
+      title,
+      projectBrief,
+      projectSummary,
+      projectRequirements,
+      format,
+      deadline,
+      location,
+      materialsLink,
+    } = req.body || {};
+
+    if (!title || !projectBrief || !deadline) {
+      return sendError(res, 400, 'Заполните название, описание большой задачи и дедлайн');
+    }
+
+    const normalizedFormat = normalizeTaskFormat(format);
+    const normalizedLocation = String(location || '').trim();
+
+    if (normalizedFormat !== 'online' && !normalizedLocation) {
+      return sendError(res, 400, 'Для очной или смешанной задачи укажите место проведения');
+    }
+
+    const normalizedMaterialsLink = String(materialsLink || '').trim();
+    if (normalizedMaterialsLink && !isValidHttpUrl(normalizedMaterialsLink)) {
+      return sendError(res, 400, 'Укажите корректную ссылку на материалы');
+    }
+
+    const plan = await generateProjectPlanWithAi({
+      title: String(title).trim(),
+      projectBrief: String(projectBrief).trim(),
+      projectSummary: String(projectSummary || '').trim(),
+      projectRequirements: buildProjectRequirementsText([
+        String(projectRequirements || '').trim(),
+        normalizedMaterialsLink ? `Материалы в облаке: ${normalizedMaterialsLink}` : '',
+      ]),
+      format: normalizedFormat,
+      deadline: String(deadline).trim(),
+      location: normalizedLocation,
+      materialsLink: normalizedMaterialsLink,
+    });
+
+    const subtasks = await Promise.all(
+      plan.subtasks.map(async (rawSubtask) => {
+        const subtask = normalizeGeneratedSubtask(
+          rawSubtask,
+          normalizedFormat,
+          String(deadline).trim(),
+          normalizedLocation,
+        );
+        const points = await calculateSuggestedTaskPoints(user.id, subtask);
+
+        return {
+          ...subtask,
+          pointsReward: points.pointsReward,
+        };
+      }),
+    );
+
+    return res.json({
+      plan: {
+        summary: plan.summary,
+        rationale: plan.rationale,
+        subtasks,
+      },
+    });
+  } catch (error) {
+    console.error('Task breakdown error:', error);
+    return sendError(res, 500, 'Не удалось подготовить проектный план');
+  }
+});
+
+app.post('/api/tasks/project', requireRole(['organization', 'admin']), async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = req.currentUser!;
+    const {
+      title,
+      projectBrief,
+      projectSummary,
+      projectRequirements,
+      deadline,
+      format,
+      location,
+      attachments,
+      materialsLink,
+      subtasks,
+    } = (req.body || {}) as TaskProjectDraftPayload;
+
+    if (!title || !projectBrief || !deadline) {
+      return sendError(res, 400, 'Заполните название, описание большой задачи и дедлайн');
+    }
+
+    if (!Array.isArray(subtasks) || subtasks.length < 2) {
+      return sendError(res, 400, 'Добавьте хотя бы две подзадачи проекта');
+    }
+
+    const normalizedFormat = normalizeTaskFormat(format);
+    const normalizedLocation = String(location || '').trim();
+    if (normalizedFormat !== 'online' && !normalizedLocation) {
+      return sendError(res, 400, 'Для очной или смешанной задачи укажите место проведения');
+    }
+
+    const normalizedMaterialsLink = String(materialsLink || '').trim();
+    if (normalizedMaterialsLink && !isValidHttpUrl(normalizedMaterialsLink)) {
+      return sendError(res, 400, 'Укажите корректную ссылку на материалы');
+    }
+
+    const normalizedSubtasks = subtasks
+      .map((subtask) =>
+        normalizeGeneratedSubtask(
+          subtask,
+          normalizedFormat,
+          String(deadline).trim(),
+          normalizedLocation,
+        ),
+      )
+      .filter((subtask) => subtask.title && subtask.description && subtask.requirements)
+      .slice(0, 6);
+
+    if (normalizedSubtasks.length < 2) {
+      return sendError(res, 400, 'После нормализации осталось недостаточно подзадач');
+    }
+
+    const parentId = randomUUID();
+    const createdAt = new Date().toISOString();
+    const parentSlug = await ensureUniqueTaskSlug(String(title).trim());
+    const parentAttachments = await syncTaskAttachments(parentId, attachments ?? [], []);
+    const parentRequirements = buildProjectRequirementsText([
+      String(projectSummary || '').trim(),
+      String(projectRequirements || '').trim(),
+    ]);
+
+    const scoredSubtasks = await Promise.all(
+      normalizedSubtasks.map(async (subtask) => ({
+        subtask,
+        scoring: await calculateSuggestedTaskPoints(user.id, subtask),
+      })),
+    );
+    const totalProjectPoints = scoredSubtasks.reduce(
+      (sum, item) => sum + Number(item.scoring.pointsReward || 0),
+      0,
+    );
+
+    await withTransaction(async () => {
+      await insertTaskRecord({
+        id: parentId,
+        title: String(title).trim(),
+        description: String(projectBrief).trim(),
+        requirements: parentRequirements,
+        organizationId: user.id,
+        organizationName: user.name,
+        category: 'Проект',
+        format: normalizedFormat,
+        workload: 'more_than_three_days',
+        taskType: 'other',
+        urgency: 'normal',
+        requiresOrgMaterials: parentAttachments.length > 0 || Boolean(normalizedMaterialsLink),
+        requiresOnsiteCheck: normalizedFormat !== 'online',
+        slug: parentSlug,
+        pointsReward: totalProjectPoints,
+        pointsMin: totalProjectPoints,
+        pointsRecommended: totalProjectPoints,
+        pointsMax: totalProjectPoints,
+        pointsExplanation: [
+          'Проект автоматически разбит на отдельные мини-задачи.',
+          'Общий объём баллов складывается из опубликованных подзадач.',
+        ],
+        taskKind: 'parent',
+        deadline: String(deadline).trim(),
+        status: 'open',
+        location: normalizedLocation,
+        attachments: parentAttachments,
+        materialsLink: normalizedMaterialsLink,
+        createdAt,
+      });
+
+      for (const [index, item] of scoredSubtasks.entries()) {
+        const childId = randomUUID();
+        const childSlug = await ensureUniqueTaskSlug(item.subtask.title);
+
+        await insertTaskRecord({
+          id: childId,
+          title: item.subtask.title,
+          description: item.subtask.description,
+          requirements: buildProjectRequirementsText([
+            item.subtask.requirements,
+            item.subtask.studentProfile
+              ? `Кому подходит: ${item.subtask.studentProfile}`
+              : '',
+            item.subtask.deliverable
+              ? `Что считается результатом: ${item.subtask.deliverable}`
+              : '',
+          ]),
+          organizationId: user.id,
+          organizationName: user.name,
+          category: deriveCategoryFromTaskType(item.subtask.taskType),
+          format: item.subtask.format,
+          workload: item.subtask.workload,
+          taskType: item.subtask.taskType,
+          urgency: item.subtask.urgency,
+          requiresOrgMaterials: item.subtask.requiresOrgMaterials,
+          requiresOnsiteCheck: item.subtask.requiresOnsiteCheck,
+          slug: childSlug,
+          pointsReward: item.scoring.pointsReward,
+          pointsMin: item.scoring.pointsMin,
+          pointsRecommended: item.scoring.pointsRecommended,
+          pointsMax: item.scoring.pointsMax,
+          pointsExplanation: item.scoring.pointsExplanation,
+          taskKind: 'subtask',
+          parentTaskId: parentId,
+          childOrder: index + 1,
+          deadline: item.subtask.deadline,
+          status: 'open',
+          location: String(item.subtask.location || '').trim(),
+          attachments: [],
+          materialsLink: '',
+          createdAt,
+        });
+      }
+    });
+
+    const parentRow = await getTaskRowById(parentId);
+    return res.status(201).json({ task: mapTask(parentRow) });
+  } catch (error) {
+    console.error('Create task project error:', error);
+    return sendError(res, 500, 'Не удалось опубликовать проект');
+  }
+});
+
 app.post('/api/tasks', requireRole(['organization', 'admin']), async (req: AuthenticatedRequest, res) => {
   try {
     const user = req.currentUser!;
@@ -1276,7 +2055,6 @@ app.post('/api/tasks', requireRole(['organization', 'admin']), async (req: Authe
       return sendError(res, 400, 'Укажите корректную ссылку на материалы');
     }
 
-    const db = await initDb();
     const trustProfile = await getOrganizationTrustProfile(user.id);
     const scoringPreview = calculateTaskScorePreview(
       {
@@ -1307,44 +2085,34 @@ app.post('/api/tasks', requireRole(['organization', 'admin']), async (req: Authe
     const nextAttachments = await syncTaskAttachments(id, attachments ?? [], []);
     const taskCategory = deriveCategoryFromTaskType(normalizedTaskType);
 
-    await db.run(
-      `
-        INSERT INTO tasks (
-          id, title, description, requirements, organizationId, organizationName,
-          category, format, workload, taskType, urgency, requiresOrgMaterials, requiresOnsiteCheck,
-          slug, pointsReward, pointsMin, pointsRecommended, pointsMax, pointsExplanation,
-          deadline, status, location, attachments, materialsLink, created_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        id,
-        String(title).trim(),
-        String(description).trim(),
-        String(requirements || '').trim(),
-        user.id,
-        user.name,
-        taskCategory,
-        normalizedFormat,
-        normalizedWorkload,
-        normalizedTaskType,
-        normalizedUrgency,
-        normalizedRequiresOrgMaterials ? 1 : 0,
-        normalizedRequiresOnsiteCheck ? 1 : 0,
-        slug,
-        numericPointsReward,
-        scoringPreview.minimum,
-        scoringPreview.recommended,
-        scoringPreview.maximum,
-        JSON.stringify(scoringPreview.explanation),
-        String(deadline),
-        'open',
-        normalizedLocation,
-        JSON.stringify(nextAttachments),
-        normalizedMaterialsLink,
-        createdAt,
-      ],
-    );
+    await insertTaskRecord({
+      id,
+      title: String(title).trim(),
+      description: String(description).trim(),
+      requirements: String(requirements || '').trim(),
+      organizationId: user.id,
+      organizationName: user.name,
+      category: taskCategory,
+      format: normalizedFormat,
+      workload: normalizedWorkload,
+      taskType: normalizedTaskType,
+      urgency: normalizedUrgency,
+      requiresOrgMaterials: normalizedRequiresOrgMaterials,
+      requiresOnsiteCheck: normalizedRequiresOnsiteCheck,
+      slug,
+      pointsReward: numericPointsReward,
+      pointsMin: scoringPreview.minimum,
+      pointsRecommended: scoringPreview.recommended,
+      pointsMax: scoringPreview.maximum,
+      pointsExplanation: scoringPreview.explanation,
+      taskKind: 'single',
+      deadline: String(deadline),
+      status: 'open',
+      location: normalizedLocation,
+      attachments: nextAttachments,
+      materialsLink: normalizedMaterialsLink,
+      createdAt,
+    });
 
     const row = await getTaskRowById(id);
     return res.status(201).json({ task: mapTask(row) });
@@ -1523,6 +2291,14 @@ app.delete(
         return sendError(res, 403, 'Недостаточно прав');
       }
 
+      const childCountRow = await db.get<{ count: number }>(
+        'SELECT COUNT(*) as count FROM tasks WHERE parentTaskId = ?',
+        req.params.taskId,
+      );
+      if (Number(childCountRow?.count || 0) > 0) {
+        return sendError(res, 409, 'Сначала удалите или завершите связанные подзадачи проекта');
+      }
+
       const responseCountRow = await db.get<{ count: number }>(
         'SELECT COUNT(*) as count FROM task_responses WHERE taskId = ?',
         req.params.taskId,
@@ -1547,6 +2323,10 @@ app.delete(
         recursive: true,
         force: true,
       });
+
+      if (task.parentTaskId) {
+        await syncParentTaskStatus(task.parentTaskId);
+      }
 
       return res.json({ ok: true });
     } catch (error) {
@@ -1580,6 +2360,9 @@ app.patch(
       }
 
       await db.run('UPDATE tasks SET status = ? WHERE id = ?', status, req.params.taskId);
+      if (task.parentTaskId) {
+        await syncParentTaskStatus(task.parentTaskId);
+      }
       const updated = await getTaskRowById(req.params.taskId);
       return res.json({ task: mapTask(updated) });
     } catch (error) {
@@ -1603,12 +2386,16 @@ app.post(
         return sendError(res, 404, 'Задача не найдена');
       }
 
+      if (normalizeTaskKind(task.taskKind) === 'parent') {
+        return sendError(res, 400, 'Нельзя откликнуться на обзорный проект. Выберите одну из подзадач.');
+      }
+
       if (task.status !== 'open') {
         return sendError(res, 400, 'Эта задача уже недоступна для отклика');
       }
 
       const existingResponse = await db.get(
-        'SELECT id FROM task_responses WHERE taskId = ? AND studentId = ?',
+        'SELECT id FROM task_response_members WHERE taskId = ? AND studentId = ?',
         req.params.taskId,
         user.id,
       );
@@ -1642,6 +2429,24 @@ app.post(
         );
 
         await txDb.run(
+          `
+            INSERT INTO task_response_members (
+              id, responseId, taskId, studentId, studentName, role, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `,
+          [
+            randomUUID(),
+            responseId,
+            req.params.taskId,
+            user.id,
+            user.name,
+            'leader',
+            now,
+          ],
+        );
+
+        await txDb.run(
           'UPDATE tasks SET status = ?, executorId = ? WHERE id = ?',
           'in_progress',
           user.id,
@@ -1665,11 +2470,220 @@ app.post(
         );
       });
 
+      if (task.parentTaskId) {
+        await syncParentTaskStatus(task.parentTaskId);
+      }
+
       const response = await db.get('SELECT * FROM task_responses WHERE id = ?', responseId);
-      return res.status(201).json({ response: mapTaskResponse(response) });
+      return res.status(201).json({
+        response: mapTaskResponse(response, await getTaskResponseMembers(responseId)),
+      });
     } catch (error) {
       console.error('Take task error:', error);
       return sendError(res, 500, 'Не удалось откликнуться на задачу');
+    }
+  },
+);
+
+app.post(
+  '/api/task-responses/:responseId/team-members',
+  requireRole(['student', 'admin']),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const { studentId } = req.body || {};
+
+      if (!studentId) {
+        return sendError(res, 400, 'Не выбран участник команды');
+      }
+
+      const db = await initDb();
+      const response = await db.get('SELECT * FROM task_responses WHERE id = ?', req.params.responseId);
+
+      if (!response) {
+        return sendError(res, 404, 'Отклик не найден');
+      }
+
+      const task = await db.get('SELECT * FROM tasks WHERE id = ?', response.taskId);
+
+      if (!task) {
+        return sendError(res, 404, 'Задача не найдена');
+      }
+
+      const currentUser = req.currentUser!;
+      const isLeader = response.studentId === currentUser.id;
+      if (currentUser.role !== 'admin' && !isLeader) {
+        return sendError(res, 403, 'Добавлять участников может только лидер команды');
+      }
+
+      if (!canManageTaskResponseTeam(response.status)) {
+        return sendError(res, 409, 'Состав команды нельзя менять на этом этапе');
+      }
+
+      if (String(studentId) === response.studentId) {
+        return sendError(res, 409, 'Лидер уже находится в команде');
+      }
+
+      const student = await db.get(
+        'SELECT * FROM users WHERE id = ? AND role = ?',
+        String(studentId),
+        'student',
+      );
+
+      if (!student) {
+        return sendError(res, 404, 'Студент не найден');
+      }
+
+      const existingParticipation = await db.get(
+        'SELECT id FROM task_response_members WHERE taskId = ? AND studentId = ?',
+        response.taskId,
+        String(studentId),
+      );
+
+      if (existingParticipation) {
+        return sendError(res, 409, 'Этот студент уже участвует в задаче');
+      }
+
+      const teamSizeRow = await db.get<{ count: number }>(
+        'SELECT COUNT(*) as count FROM task_response_members WHERE responseId = ?',
+        response.id,
+      );
+
+      if (Number(teamSizeRow?.count || 0) >= MAX_TASK_TEAM_SIZE) {
+        return sendError(
+          res,
+          409,
+          `В одной команде может быть не более ${MAX_TASK_TEAM_SIZE} человек`,
+        );
+      }
+
+      const now = new Date().toISOString();
+
+      await withTransaction(async () => {
+        const txDb = await initDb();
+        await txDb.run(
+          `
+            INSERT INTO task_response_members (
+              id, responseId, taskId, studentId, studentName, role, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `,
+          [
+            randomUUID(),
+            response.id,
+            response.taskId,
+            student.id,
+            mapUser(student)?.name || student.name || 'Студент',
+            'member',
+            now,
+          ],
+        );
+
+        await txDb.run(
+          `
+            INSERT INTO notifications (id, userId, title, message, read, type, link, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `,
+          [
+            randomUUID(),
+            student.id,
+            'Вас добавили в команду',
+            `Лидер команды добавил вас к задаче "${task.title}". Теперь она отображается в ваших текущих задачах.`,
+            0,
+            'info',
+            taskPublicPath(task),
+            now,
+          ],
+        );
+      });
+
+      const updated = await db.get('SELECT * FROM task_responses WHERE id = ?', response.id);
+      return res.json({
+        response: mapTaskResponse(updated, await getTaskResponseMembers(response.id)),
+      });
+    } catch (error) {
+      console.error('Add team member error:', error);
+      return sendError(res, 500, 'Не удалось добавить участника');
+    }
+  },
+);
+
+app.delete(
+  '/api/task-responses/:responseId/team-members/:studentId',
+  requireRole(['student', 'admin']),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const db = await initDb();
+      const response = await db.get('SELECT * FROM task_responses WHERE id = ?', req.params.responseId);
+
+      if (!response) {
+        return sendError(res, 404, 'Отклик не найден');
+      }
+
+      const task = await db.get('SELECT * FROM tasks WHERE id = ?', response.taskId);
+
+      if (!task) {
+        return sendError(res, 404, 'Задача не найдена');
+      }
+
+      const currentUser = req.currentUser!;
+      const isLeader = response.studentId === currentUser.id;
+      if (currentUser.role !== 'admin' && !isLeader) {
+        return sendError(res, 403, 'Убирать участников может только лидер команды');
+      }
+
+      if (!canManageTaskResponseTeam(response.status)) {
+        return sendError(res, 409, 'Состав команды нельзя менять на этом этапе');
+      }
+
+      if (req.params.studentId === response.studentId) {
+        return sendError(res, 409, 'Лидера команды удалить нельзя');
+      }
+
+      const member = await db.get(
+        'SELECT * FROM task_response_members WHERE responseId = ? AND studentId = ?',
+        response.id,
+        req.params.studentId,
+      );
+
+      if (!member) {
+        return sendError(res, 404, 'Участник команды не найден');
+      }
+
+      const now = new Date().toISOString();
+
+      await withTransaction(async () => {
+        const txDb = await initDb();
+        await txDb.run(
+          'DELETE FROM task_response_members WHERE responseId = ? AND studentId = ?',
+          response.id,
+          req.params.studentId,
+        );
+
+        await txDb.run(
+          `
+            INSERT INTO notifications (id, userId, title, message, read, type, link, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `,
+          [
+            randomUUID(),
+            req.params.studentId,
+            'Вас убрали из команды',
+            `Вы больше не участвуете в задаче "${task.title}".`,
+            0,
+            'warning',
+            '/студент',
+            now,
+          ],
+        );
+      });
+
+      const updated = await db.get('SELECT * FROM task_responses WHERE id = ?', response.id);
+      return res.json({
+        response: mapTaskResponse(updated, await getTaskResponseMembers(response.id)),
+      });
+    } catch (error) {
+      console.error('Remove team member error:', error);
+      return sendError(res, 500, 'Не удалось удалить участника');
     }
   },
 );
@@ -1740,8 +2754,14 @@ app.post(
         );
       });
 
+      if (task.parentTaskId) {
+        await syncParentTaskStatus(task.parentTaskId);
+      }
+
       const updated = await db.get('SELECT * FROM task_responses WHERE id = ?', req.params.responseId);
-      return res.json({ response: mapTaskResponse(updated) });
+      return res.json({
+        response: mapTaskResponse(updated, await getTaskResponseMembers(req.params.responseId)),
+      });
     } catch (error) {
       console.error('Submit task error:', error);
       return sendError(res, 500, 'Не удалось отправить работу');
@@ -1784,6 +2804,21 @@ app.post(
         return sendError(res, 404, 'Студент не найден');
       }
 
+      const teamMembers = await getTaskResponseMembers(req.params.responseId);
+      const participants = teamMembers.length
+        ? teamMembers
+        : [
+            {
+              id: response.id,
+              responseId: response.id,
+              taskId: response.taskId,
+              studentId: response.studentId,
+              studentName: response.studentName,
+              role: 'leader' as const,
+              createdAt: normalizeDate(response.created_at),
+            },
+          ];
+
       const now = new Date().toISOString();
 
       await withTransaction(async () => {
@@ -1804,52 +2839,64 @@ app.post(
           await txDb.run('UPDATE tasks SET status = ? WHERE id = ?', 'completed', task.id);
 
           if (response.status !== 'completed') {
-            await txDb.run(
-              'UPDATE users SET points = COALESCE(points, 0) + ? WHERE id = ?',
-              Number(task.pointsReward || 0),
-              student.id,
-            );
+            for (const participant of participants) {
+              await txDb.run(
+                'UPDATE users SET points = COALESCE(points, 0) + ? WHERE id = ?',
+                Number(task.pointsReward || 0),
+                participant.studentId,
+              );
+            }
           }
 
-          await txDb.run(
-            `
-              INSERT INTO notifications (id, userId, title, message, read, type, link, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `,
-            [
-              randomUUID(),
-              student.id,
-              'Задача принята',
-              `Ваше решение по задаче "${task.title}" принято. Начислено ${task.pointsReward} баллов.`,
-              0,
-              'success',
-              '/портфолио',
-              now,
-            ],
-          );
+          for (const participant of participants) {
+            await txDb.run(
+              `
+                INSERT INTO notifications (id, userId, title, message, read, type, link, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `,
+              [
+                randomUUID(),
+                participant.studentId,
+                'Задача принята',
+                `Командная работа по задаче "${task.title}" принята. Начислено ${task.pointsReward} баллов каждому участнику.`,
+                0,
+                'success',
+                '/портфолио',
+                now,
+              ],
+            );
+          }
         } else {
           await txDb.run('UPDATE tasks SET status = ? WHERE id = ?', 'in_progress', task.id);
-          await txDb.run(
-            `
-              INSERT INTO notifications (id, userId, title, message, read, type, link, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `,
-            [
-              randomUUID(),
-              student.id,
-              'Требуется доработка',
-              `По задаче "${task.title}" есть замечания. Откройте карточку задачи и загрузите исправленный результат.`,
-              0,
-              'warning',
-              taskPublicPath(task),
-              now,
-            ],
-          );
+          for (const participant of participants) {
+            await txDb.run(
+              `
+                INSERT INTO notifications (id, userId, title, message, read, type, link, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `,
+              [
+                randomUUID(),
+                participant.studentId,
+                'Требуется доработка',
+                `По задаче "${task.title}" есть замечания. Команде нужно загрузить исправленный результат.`,
+                0,
+                'warning',
+                taskPublicPath(task),
+                now,
+              ],
+            );
+          }
         }
       });
 
+      if (task.parentTaskId) {
+        await syncParentTaskStatus(task.parentTaskId);
+      }
+
       const updated = await db.get('SELECT * FROM task_responses WHERE id = ?', req.params.responseId);
-      return res.json({ response: mapTaskResponse(updated) });
+      return res.json({
+        response: mapTaskResponse(updated, await getTaskResponseMembers(req.params.responseId)),
+      });
     } catch (error) {
       console.error('Review task error:', error);
       return sendError(res, 500, 'Не удалось проверить работу');

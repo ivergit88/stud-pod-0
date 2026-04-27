@@ -185,6 +185,133 @@ html[class*="a11y-color-"] .a11y-step-badge {
   border-color: var(--a11y-accent-border) !important;
 }
 
+html[class*="a11y-color-"] .a11y-step-number {
+  color: var(--a11y-accent-text) !important;
+}
+
+html[class*="a11y-color-"] .a11y-org-badge,
+html[class*="a11y-color-"] .a11y-org-badge * {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border-color: var(--a11y-accent-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-org-badge,
+html[class*="a11y-color-"] .a11y-task-chip,
+html[class*="a11y-color-"] .a11y-task-points,
+html[class*="a11y-color-"] .a11y-notification-count {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border: 1px solid var(--a11y-accent-border) !important;
+  font-weight: 700 !important;
+}
+
+html[class*="a11y-color-"] .a11y-org-badge *,
+html[class*="a11y-color-"] .a11y-task-chip *,
+html[class*="a11y-color-"] .a11y-task-points *,
+html[class*="a11y-color-"] .a11y-notification-count * {
+  color: inherit !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[class*="a11y-color-"] .a11y-notification-card {
+  background-color: var(--a11y-surface) !important;
+  color: var(--a11y-text) !important;
+  border: 1px solid var(--a11y-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-notification-card * {
+  color: var(--a11y-text) !important;
+}
+
+html[class*="a11y-color-"] a.a11y-org-dashboard-link {
+  color: var(--a11y-link) !important;
+}
+
+html[class*="a11y-color-"] a.a11y-task-chip,
+html[class*="a11y-color-"] a.a11y-org-badge {
+  color: inherit !important;
+}
+
+html[class*="a11y-color-"] .a11y-notification-count {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border-color: var(--a11y-accent-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-notification-card {
+  background-color: var(--a11y-surface) !important;
+  color: var(--a11y-text) !important;
+  border-color: var(--a11y-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-notification-card h3,
+html[class*="a11y-color-"] .a11y-notification-card p,
+html[class*="a11y-color-"] .a11y-notification-card span {
+  color: var(--a11y-text) !important;
+}
+
+html[class*="a11y-color-"] .a11y-task-chip {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border-color: var(--a11y-accent-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-task-points {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border-color: var(--a11y-accent-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-org-warning,
+html[class*="a11y-color-"] .a11y-org-warning * {
+  background-color: var(--a11y-surface) !important;
+  color: var(--a11y-text) !important;
+  border-color: var(--a11y-border) !important;
+}
+
+html[class*="a11y-color-"] span.a11y-org-badge,
+html[class*="a11y-color-"] span.a11y-org-badge[class*="bg-"],
+html[class*="a11y-color-"] span.a11y-org-badge[class*="text-"] {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border-color: var(--a11y-accent-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-org-dashboard-link,
+html[class*="a11y-color-"] .a11y-org-dashboard-link * {
+  color: var(--a11y-link) !important;
+}
+
+html[class*="a11y-color-"] .a11y-notification-count,
+html[class*="a11y-color-"] .a11y-notification-count * {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border-color: var(--a11y-accent-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-notification-card,
+html[class*="a11y-color-"] .a11y-notification-card * {
+  background-color: var(--a11y-surface) !important;
+  color: var(--a11y-text) !important;
+  border-color: var(--a11y-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-task-chip,
+html[class*="a11y-color-"] .a11y-task-chip * {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border-color: var(--a11y-accent-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-task-points,
+html[class*="a11y-color-"] .a11y-task-points * {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border-color: var(--a11y-accent-border) !important;
+}
+
 html[class*="a11y-color-"] .a11y-score-panel,
 html[class*="a11y-color-"] .a11y-score-panel * {
   background-color: var(--a11y-surface) !important;
@@ -363,19 +490,25 @@ html[class*="a11y-color-"] .a11y-chat-bubble-assistant * {
 }
 
 html[class*="a11y-color-"] .a11y-format-option,
-html[class*="a11y-color-"] .a11y-attach-button {
+html[class*="a11y-color-"] .a11y-attach-button,
+html[class*="a11y-color-"] .a11y-format-option *,
+html[class*="a11y-color-"] .a11y-attach-button * {
   background-color: var(--a11y-surface) !important;
   color: var(--a11y-text) !important;
   border-color: var(--a11y-border) !important;
 }
 
-html[class*="a11y-color-"] .a11y-format-option *,
-html[class*="a11y-color-"] .a11y-attach-button * {
-  color: inherit !important;
+html[class*="a11y-color-"] .a11y-format-option.is-active,
+html[class*="a11y-color-"] .a11y-format-option.is-active *,
+html[class*="a11y-color-"] .a11y-format-option.is-active svg {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border-color: var(--a11y-accent-border) !important;
+  fill: var(--a11y-accent-text) !important;
 }
 
-html[class*="a11y-color-"] .a11y-format-option.is-active,
-html[class*="a11y-color-"] .a11y-format-option.is-active * {
+html[class*="a11y-color-"] .a11y-org-badge,
+html[class*="a11y-color-"] .a11y-org-badge * {
   background-color: var(--a11y-accent-bg) !important;
   color: var(--a11y-accent-text) !important;
   border-color: var(--a11y-accent-border) !important;
@@ -409,4 +542,69 @@ html[class*="a11y-color-"] .a11y-format-option.is-active * {
     box-shadow: none !important;
     border: 1px solid #e5e7eb !important;
   }
+}
+
+html[class*="a11y-color-"] .a11y-force-accent,
+html[class*="a11y-color-"] .a11y-force-accent[class*="bg-"],
+html[class*="a11y-color-"] .a11y-force-accent[class*="text-"] {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border-color: var(--a11y-accent-border) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[class*="a11y-color-"] .a11y-force-accent *,
+html[class*="a11y-color-"] .a11y-force-accent svg {
+  color: inherit !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[class*="a11y-color-"] .a11y-force-surface,
+html[class*="a11y-color-"] .a11y-force-surface[class*="bg-"],
+html[class*="a11y-color-"] .a11y-force-surface[class*="text-"] {
+  background-color: var(--a11y-surface) !important;
+  color: var(--a11y-text) !important;
+  border-color: var(--a11y-border) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[class*="a11y-color-"] .a11y-force-surface *,
+html[class*="a11y-color-"] .a11y-force-surface svg {
+  color: inherit !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[class*="a11y-color-"] .a11y-publication-selector,
+html[class*="a11y-color-"] .a11y-publication-selector * ,
+html[class*="a11y-color-"] .a11y-project-plan,
+html[class*="a11y-color-"] .a11y-project-plan * {
+  background-color: var(--a11y-surface) !important;
+  color: var(--a11y-text) !important;
+  border-color: var(--a11y-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-publication-card {
+  background-color: var(--a11y-surface) !important;
+  color: var(--a11y-text) !important;
+  border: 2px solid var(--a11y-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-publication-card.is-active,
+html[class*="a11y-color-"] .a11y-publication-card.is-active * {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border-color: var(--a11y-accent-border) !important;
+}
+
+html[class*="a11y-color-"] .a11y-force-surface .a11y-force-accent,
+html[class*="a11y-color-"] .a11y-force-surface .a11y-force-accent *,
+html[class*="a11y-color-"] .a11y-project-plan .a11y-force-accent,
+html[class*="a11y-color-"] .a11y-project-plan .a11y-force-accent * {
+  background-color: var(--a11y-accent-bg) !important;
+  color: var(--a11y-accent-text) !important;
+  border-color: var(--a11y-accent-border) !important;
 }

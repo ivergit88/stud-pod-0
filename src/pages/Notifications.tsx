@@ -58,7 +58,7 @@ export const Notifications: React.FC = () => {
             {userNotifications.map(notification => (
               <div 
                 key={notification.id} 
-                className={`p-6 flex items-start transition-colors cursor-pointer ${notification.read ? 'bg-white' : 'bg-blue-50/50'}`}
+                className={`a11y-notification-card cursor-pointer p-6 transition-colors ${notification.read ? 'bg-white' : 'bg-blue-50/50'} flex items-start`}
                 onClick={() => handleOpenNotification(notification.id, notification.link)}
               >
                 <div className="flex-shrink-0 mr-4 mt-1">
@@ -79,7 +79,9 @@ export const Notifications: React.FC = () => {
                 </div>
                 {!notification.read && (
                   <div className="ml-4 flex-shrink-0">
-                    <span className="inline-block w-2.5 h-2.5 bg-blue-600 rounded-full"></span>
+                    <span className="a11y-notification-count a11y-force-accent inline-flex min-h-6 items-center justify-center rounded-full bg-blue-600 px-2 text-xs font-semibold text-white">
+                      Новое
+                    </span>
                   </div>
                 )}
               </div>

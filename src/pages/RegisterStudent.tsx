@@ -87,6 +87,11 @@ export const RegisterStudent: React.FC = () => {
       return;
     }
 
+    if (formData.skills.includes(OTHER_SKILL_OPTION) && !formData.otherSkill.trim()) {
+      setError('Если выбрали "Другое", укажите свой навык');
+      return;
+    }
+
     const finalUniversity =
       formData.university === 'Другое' ? formData.otherUniversity.trim() : formData.university;
 
@@ -248,7 +253,18 @@ export const RegisterStudent: React.FC = () => {
               </div>
               {formData.skills.includes(OTHER_SKILL_OPTION) && (
                 <div className="mt-3">
-                  <input type="text" name="otherSkill" value={formData.otherSkill} onChange={handleChange} placeholder="Укажите ваши навыки" className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500" />
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Уточните навык *</label>
+                  <input
+                    type="text"
+                    name="otherSkill"
+                    value={formData.otherSkill}
+                    onChange={handleChange}
+                    placeholder="Например: UX-исследования, саунд-дизайн, motion-дизайн"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="mt-2 text-xs text-gray-500">
+                    Можно указать один основной навык, по которому вас будут находить для задач и команды.
+                  </p>
                 </div>
               )}
             </div>

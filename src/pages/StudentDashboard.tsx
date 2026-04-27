@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext';
 import { Link } from 'react-router-dom';
 import { Briefcase, Clock, CheckCircle, Star, ChevronRight } from 'lucide-react';
 import { getTaskHref, getTaskFormatLabel } from '../lib/tasks';
+import { isResponseLeader, isStudentInResponse } from '../lib/task-responses';
 
 export const StudentDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -13,7 +14,7 @@ export const StudentDashboard: React.FC = () => {
     return <div>Доступ запрещен</div>;
   }
 
-  const studentResponses = responses.filter(r => r.studentId === user.id);
+  const studentResponses = responses.filter((response) => isStudentInResponse(response, user.id));
   const activeTasksCount = studentResponses.filter(
     r =>
       r.status === 'pending' ||
@@ -100,13 +101,16 @@ export const StudentDashboard: React.FC = () => {
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center">
               <h2 className="text-xl font-bold text-gray-900">Мои текущие задачи</h2>
-              <Link to="/задачи" className="text-sm font-medium text-blue-600 hover:text-blue-800 flex items-center">
+              <Link to="/задачи" className="a11y-org-dashboard-link flex items-center text-sm font-medium text-blue-600 hover:text-blue-800">
                 Все задачи <ChevronRight className="w-4 h-4 ml-1" />
               </Link>
             </div>
             <div className="divide-y divide-gray-100">
               {activeTasksDetails.length > 0 ? (
-                activeTasksDetails.map((item) => (
+                activeTasksDetails.map((item) => {
+                  const isLeader = isResponseLeader(item, user.id);
+
+                  return (
                   <div key={item.id} className="p-6 hover:bg-gray-50 transition-colors">
                     <div className="flex justify-between items-start mb-2">
                         <h3 className="text-lg font-semibold text-gray-900">
@@ -114,7 +118,7 @@ export const StudentDashboard: React.FC = () => {
                           {item.task?.title}
                         </Link>
                       </h3>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      <span className={`a11y-task-chip a11y-force-accent px-3 py-1 rounded-full text-xs font-medium ${
                         item.status === 'pending' || item.status === 'accepted' ? 'bg-amber-100 text-amber-800' :
                         item.status === 'submitted' ? 'bg-blue-100 text-blue-800' :
                         item.status === 'needs_revision' ? 'bg-red-100 text-red-800' :
@@ -126,6 +130,11 @@ export const StudentDashboard: React.FC = () => {
                       </span>
                     </div>
                     <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.task?.description}</p>
+                    {item.task?.parentTaskTitle && (
+                      <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                        Часть проекта: {item.task.parentTaskTitle}
+                      </div>
+                    )}
                     <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                       <div className="flex items-center text-gray-500">
                         <Briefcase className="w-4 h-4 mr-1.5" />
@@ -133,7 +142,7 @@ export const StudentDashboard: React.FC = () => {
                       </div>
                       <div className="flex flex-wrap items-center gap-3">
                         <span
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                          className={`a11y-task-chip a11y-force-accent rounded-full px-3 py-1 text-xs font-medium ${
                             item.task?.format === 'online'
                               ? 'bg-blue-50 text-blue-700'
                               : item.task?.format === 'hybrid'
@@ -143,8 +152,16 @@ export const StudentDashboard: React.FC = () => {
                         >
                           {getTaskFormatLabel(item.task?.format)}
                         </span>
+                        <span className="a11y-task-chip a11y-force-accent rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                          {isLeader ? 'Лидер команды' : 'Участник команды'}
+                        </span>
+                        {item.teamMembers.length > 1 && (
+                          <span className="a11y-task-chip a11y-force-accent rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                            Команда: {item.teamMembers.length}
+                          </span>
+                        )}
                         <span
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                          className={`a11y-task-chip a11y-force-accent rounded-full px-3 py-1 text-xs font-medium ${
                             Math.ceil((new Date(item.task!.deadline).getTime() - Date.now()) / (24 * 60 * 60 * 1000)) <= 3
                               ? 'bg-red-50 text-red-700'
                               : 'bg-gray-100 text-gray-700'
@@ -152,13 +169,34 @@ export const StudentDashboard: React.FC = () => {
                         >
                           Дедлайн: {new Date(item.task!.deadline).toLocaleDateString('ru-RU')}
                         </span>
-                        <div className="font-medium text-blue-600">
-                          +{item.task?.pointsReward} баллов
-                        </div>
+                        <span className="a11y-task-points a11y-force-accent rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                          {item.task?.pointsReward} баллов
+                        </span>
                       </div>
                     </div>
+                    <div className="mt-4 flex flex-wrap justify-end gap-2">
+                      {isLeader && (
+                        <Link
+                          to={`/сокомандники?response=${item.id}`}
+                          className="inline-flex items-center rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                        >
+                          Собрать команду
+                        </Link>
+                      )}
+                      <Link
+                        to={getTaskHref(item.task!)}
+                        className="inline-flex items-center rounded-xl bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
+                      >
+                        {item.status === 'needs_revision'
+                          ? 'Открыть ТЗ и пересдать работу'
+                          : item.status === 'submitted'
+                            ? 'Открыть полное ТЗ'
+                            : 'Открыть ТЗ и отправить решение'}
+                        <ChevronRight className="ml-1 h-4 w-4" />
+                      </Link>
+                    </div>
                   </div>
-                ))
+                )})
               ) : (
                 <div className="p-8 text-center text-gray-500">
                   <p>У вас пока нет активных задач.</p>
