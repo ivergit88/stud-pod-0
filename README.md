@@ -190,8 +190,11 @@ npm run domain
 Ключевые переменные:
 
 - `PORT` — порт Express-сервера
-- `JWT_SECRET` — секрет для сессий/токенов
+- `JWT_SECRET` — секрет для сессий/токенов; в `NODE_ENV=production` обязателен
 - `COOKIE_SECURE` — secure-cookie режим
+- `CORS_ORIGINS` — дополнительные разрешённые домены через запятую, если сайт открывается не только с `https://студ-подряд.рф`
+- `CLIENT_ORIGIN` / `PUBLIC_ORIGIN` — один дополнительный публичный адрес фронта или прокси
+- `TRUST_PROXY` — настройка доверия к reverse proxy; по умолчанию в production включён первый proxy, для отключения поставить `false`
 - `YANDEXGPT_API_KEY` — ключ YandexGPT
 - `YANDEX_FOLDER_ID` — folder id для YandexGPT
 - `VITE_YANDEX_MAPS_API_KEY` — ключ JS API Яндекс.Карт

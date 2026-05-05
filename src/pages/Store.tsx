@@ -51,7 +51,7 @@ export const Store: React.FC = () => {
                 </div>
               </div>
               <div className="p-5 flex-1 flex flex-col">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{product.category}</span>
+                <span className="a11y-category-value text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{product.category}</span>
                 <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2">{product.title}</h3>
                 <p className="text-sm text-gray-600 mb-4 line-clamp-3 flex-1">{product.description}</p>
                 

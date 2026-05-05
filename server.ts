@@ -26,6 +26,7 @@ import {
   type GeneratedProjectPlan,
   type GeneratedProjectSubtask,
 } from './src/lib/task-projects';
+import { buildTaskAutofillDraft } from './src/lib/task-autofill';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,8 +36,9 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_COOKIE_NAME = 'stud_pod_session';
-const secureCookies =
-  process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production';
+const isProduction = process.env.NODE_ENV === 'production';
+const secureCookies = process.env.COOKIE_SECURE === 'true' || isProduction;
+const jwtSecret = process.env.JWT_SECRET?.trim();
 const databasePath = process.env.DATABASE_PATH
   ? path.resolve(process.env.DATABASE_PATH)
   : path.join(__dirname, 'database.sqlite');
@@ -48,10 +50,42 @@ const TASK_ATTACHMENTS_DIR = 'task-materials';
 const MAX_TASK_ATTACHMENT_COUNT = 3;
 const MAX_TASK_ATTACHMENT_SIZE = 5 * 1024 * 1024;
 const MAX_TASK_TEAM_SIZE = 5;
+const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const AUTH_RATE_LIMIT_MAX = 20;
 const EVENT_POINTS_MIN = 10;
 const EVENT_POINTS_MAX = 80;
 const OTHER_SKILL_PLACEHOLDER = 'Другое (укажите)';
 const TASK_FORMATS = new Set(['online', 'hybrid', 'offline']);
+const trustProxySetting =
+  process.env.TRUST_PROXY === 'false'
+    ? false
+    : process.env.TRUST_PROXY || (isProduction ? 1 : false);
+const defaultCorsOrigins = [
+  'https://студ-подряд.рф',
+  new URL('https://студ-подряд.рф').origin,
+  'https://www.студ-подряд.рф',
+  new URL('https://www.студ-подряд.рф').origin,
+];
+const devCorsOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+const configuredCorsOrigins = [
+  process.env.CORS_ORIGINS,
+  process.env.CLIENT_ORIGIN,
+  process.env.PUBLIC_ORIGIN,
+]
+  .filter(Boolean)
+  .flatMap((value) => String(value).split(','))
+  .map((value) => value.trim())
+  .filter(Boolean);
+const allowedCorsOrigins = new Set(
+  [...defaultCorsOrigins, ...configuredCorsOrigins, ...(!isProduction ? devCorsOrigins : [])]
+    .map((origin) => normalizeCorsOrigin(origin)),
+);
+const authRateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 const TASK_SELECT_FIELDS = `
   SELECT
     t.*,
@@ -104,6 +138,14 @@ const ALLOWED_TASK_ATTACHMENT_EXTENSIONS = new Set([
   '.7z',
 ]);
 
+if (isProduction && !jwtSecret) {
+  throw new Error('JWT_SECRET is required in production');
+}
+
+if (!isProduction && !jwtSecret) {
+  console.warn('JWT_SECRET is not set; using a development-only session key.');
+}
+
 interface CurrentUser {
   id: string;
   uid: string;
@@ -149,6 +191,21 @@ interface StoredTaskAttachment {
 
 type TaskFormat = 'online' | 'hybrid' | 'offline';
 type TaskKind = 'single' | 'parent' | 'subtask';
+
+interface GeneratedTaskBrief {
+  title: string;
+  description: string;
+  requirements: string;
+  format: TaskFormat;
+  workload: ReturnType<typeof normalizeTaskWorkload>;
+  taskType: TaskType;
+  urgency: ReturnType<typeof normalizeTaskUrgency>;
+  requiresOrgMaterials: boolean;
+  requiresOnsiteCheck: boolean;
+  parameterReason: string;
+  missingInputs: string[];
+  confidence: number;
+}
 
 type TaskResponseMemberRole = 'leader' | 'member';
 
@@ -233,7 +290,61 @@ interface TaskProjectDraftPayload {
 }
 
 function getJwtSecret() {
-  return process.env.JWT_SECRET || 'change-me-before-production';
+  return jwtSecret || 'dev-only-stud-pod-session-secret';
+}
+
+function getClientIp(req: Request) {
+  return String(req.ip || req.socket.remoteAddress || 'unknown')
+    .trim()
+    .slice(0, 80);
+}
+
+function rateLimitAuth(req: Request, res: Response, next: NextFunction) {
+  const now = Date.now();
+  const key = `${getClientIp(req)}:${String(req.body?.email || '').trim().toLowerCase()}`;
+  const bucket = authRateLimitBuckets.get(key);
+
+  if (authRateLimitBuckets.size > 5000) {
+    for (const [bucketKey, value] of authRateLimitBuckets) {
+      if (value.resetAt <= now) {
+        authRateLimitBuckets.delete(bucketKey);
+      }
+    }
+  }
+
+  if (!bucket || bucket.resetAt <= now) {
+    authRateLimitBuckets.set(key, {
+      count: 1,
+      resetAt: now + AUTH_RATE_LIMIT_WINDOW_MS,
+    });
+    return next();
+  }
+
+  if (bucket.count >= AUTH_RATE_LIMIT_MAX) {
+    res.setHeader('Retry-After', String(Math.ceil((bucket.resetAt - now) / 1000)));
+    return sendError(res, 429, 'Слишком много попыток. Повторите позже.');
+  }
+
+  bucket.count += 1;
+  return next();
+}
+
+function normalizeCorsOrigin(origin: string) {
+  const trimmed = origin.trim().replace(/\/+$/g, '');
+
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return trimmed;
+  }
+}
+
+function isAllowedCorsOrigin(origin?: string) {
+  if (!origin) {
+    return true;
+  }
+
+  return allowedCorsOrigins.has(normalizeCorsOrigin(origin));
 }
 
 function normalizeDate(value?: string | null) {
@@ -509,6 +620,48 @@ function normalizeGeneratedSubtask(
   };
 }
 
+function buildFallbackTaskBrief(simplePrompt: string): GeneratedTaskBrief {
+  return buildTaskAutofillDraft(simplePrompt);
+}
+
+function mergeMissingInputs(primary: unknown, fallback: string[]) {
+  const values = Array.isArray(primary)
+    ? primary.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+
+  return Array.from(new Set([...values, ...fallback])).slice(0, 4);
+}
+
+function normalizeGeneratedTaskBrief(raw: Partial<GeneratedTaskBrief>, simplePrompt: string): GeneratedTaskBrief {
+  const fallback = buildFallbackTaskBrief(simplePrompt);
+  const format = normalizeTaskFormat(String(raw.format || fallback.format));
+  const missingInputs = mergeMissingInputs(raw.missingInputs, fallback.missingInputs);
+  const rawConfidence = Number(raw.confidence);
+
+  return {
+    title: String(raw.title || fallback.title).trim(),
+    description: String(raw.description || fallback.description).trim(),
+    requirements: String(raw.requirements || fallback.requirements).trim(),
+    format,
+    workload: normalizeTaskWorkload(String(raw.workload || fallback.workload)),
+    taskType: normalizeTaskType(String(raw.taskType || fallback.taskType)),
+    urgency: normalizeTaskUrgency(String(raw.urgency || fallback.urgency)),
+    requiresOrgMaterials:
+      typeof raw.requiresOrgMaterials === 'undefined'
+        ? fallback.requiresOrgMaterials
+        : parseBooleanFlag(raw.requiresOrgMaterials) || fallback.requiresOrgMaterials,
+    requiresOnsiteCheck:
+      format === 'online'
+        ? false
+        : parseBooleanFlag(raw.requiresOnsiteCheck ?? fallback.requiresOnsiteCheck) || fallback.requiresOnsiteCheck,
+    parameterReason: String(raw.parameterReason || fallback.parameterReason).trim(),
+    missingInputs,
+    confidence: Number.isFinite(rawConfidence)
+      ? Math.min(1, Math.max(0, rawConfidence))
+      : fallback.confidence,
+  };
+}
+
 async function syncParentTaskStatus(parentTaskId?: string | null) {
   if (!parentTaskId) {
     return;
@@ -597,7 +750,15 @@ function sanitizeAttachmentName(originalName: string) {
 }
 
 function resolveRelativeUploadPath(relativePath: string) {
-  return path.join(uploadsRoot, ...relativePath.split('/'));
+  const normalizedPath = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, '');
+  const resolvedPath = path.resolve(uploadsRoot, normalizedPath);
+  const uploadsRootWithSeparator = path.resolve(uploadsRoot) + path.sep;
+
+  if (resolvedPath !== path.resolve(uploadsRoot) && !resolvedPath.startsWith(uploadsRootWithSeparator)) {
+    throw new Error('Некорректный путь к файлу');
+  }
+
+  return resolvedPath;
 }
 
 async function syncTaskAttachments(
@@ -1239,7 +1400,7 @@ async function generateProjectPlanWithAi(
       {
         role: 'system',
         text:
-          'Ты - аналитик цифровой платформы "Студенческий подряд". Нужно разложить одну крупную задачу учреждения на 3-6 независимых мини-задач для студентов. Каждая мини-задача должна иметь самостоятельный проверяемый результат и не должна выглядеть как полноценный коммерческий заказ целиком. Старайся держать уровень входа умеренным: подзадачи должны подходить начинающим студентам при наличии цифровых инструментов. Верни строго JSON без markdown. Формат: {"summary":"...","rationale":"...","subtasks":[{"title":"...","description":"...","requirements":"...","taskType":"content|design|website|bot|digitization|3d|setup|analytics|other","workload":"up_to_3_hours|one_day|two_to_three_days|more_than_three_days","urgency":"normal|urgent","requiresOrgMaterials":true,"requiresOnsiteCheck":false,"studentProfile":"...","deliverable":"..."}]}',
+          'Ты - аналитик цифровой платформы "Студенческий подряд". Нужно разложить одну крупную задачу учреждения на 3-6 независимых мини-задач для студентов. Каждая мини-задача должна иметь самостоятельный проверяемый результат, понятный объём и безопасный вход для начинающего участника. Не растягивай подзадачу до крупного неопределённого проекта. Старайся держать уровень входа умеренным: подзадачи должны подходить начинающим студентам при наличии цифровых инструментов. Верни строго JSON без markdown. Формат: {"summary":"...","rationale":"...","subtasks":[{"title":"...","description":"...","requirements":"...","taskType":"content|design|website|bot|digitization|3d|setup|analytics|other","workload":"up_to_3_hours|one_day|two_to_three_days|more_than_three_days","urgency":"normal|urgent","requiresOrgMaterials":true,"requiresOnsiteCheck":false,"studentProfile":"...","deliverable":"..."}]}',
       },
       {
         role: 'user',
@@ -1345,9 +1506,30 @@ function requireRole(roles: CurrentUser['role'][]) {
   };
 }
 
+app.disable('x-powered-by');
+app.set('trust proxy', trustProxySetting);
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+
+  if (secureCookies) {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  }
+
+  next();
+});
 app.use(
   cors({
-    origin: true,
+    origin(origin, callback) {
+      if (isAllowedCorsOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('CORS origin is not allowed'));
+    },
     credentials: true,
   }),
 );
@@ -1359,6 +1541,7 @@ app.use(
     setHeaders(res, filePath) {
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('Content-Disposition', 'attachment');
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow');
     },
   }),
 );
@@ -1409,7 +1592,7 @@ app.get('/api/auth/me', (req: AuthenticatedRequest, res) => {
   });
 });
 
-app.post('/api/auth/register', async (req: AuthenticatedRequest, res) => {
+app.post('/api/auth/register', rateLimitAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { role, additionalData, password } = req.body || {};
 
@@ -1537,7 +1720,7 @@ app.post('/api/auth/register', async (req: AuthenticatedRequest, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req: AuthenticatedRequest, res) => {
+app.post('/api/auth/login', rateLimitAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { email, password } = req.body || {};
 
@@ -1729,33 +1912,38 @@ app.post('/api/chat', async (req, res) => {
 app.post('/api/ai/task-brief', requireRole(['organization', 'admin']), async (req, res) => {
   try {
     const { simplePrompt } = req.body || {};
+    const prompt = String(simplePrompt || '').trim();
 
-    if (!simplePrompt || !String(simplePrompt).trim()) {
+    if (!prompt) {
       return sendError(res, 400, 'Опишите задачу простыми словами');
     }
 
-    const reply = await callYandexGpt([
-      {
-        role: 'system',
-        text:
-          'Ты - IT-аналитик проекта "Студенческий подряд". Преобразуй бытовое описание задачи от учреждения культуры в понятное техническое задание для студента. Верни ответ строго в JSON без markdown и без дополнительных пояснений. Формат: {"description":"...","requirements":"..."}',
-      },
-      {
-        role: 'user',
-        text: String(simplePrompt).trim(),
-      },
-    ]);
+    let reply = '';
+    let normalized: GeneratedTaskBrief;
 
-    if (!reply) {
-      return sendError(res, 502, 'Не удалось получить ответ от модели');
+    try {
+      reply =
+        (await callYandexGpt([
+          {
+            role: 'system',
+            text:
+              'Ты - IT-аналитик проекта "Студенческий подряд". Преобразуй бытовое описание задачи от учреждения культуры в понятную карточку для студента и сам подбери параметры для автоматического расчета баллов. Не усложняй задачу сверх запроса: если работа похожа на микро-задачу для начинающего студента, выбирай умеренную трудоемкость. Не придумывай дедлайн, адрес, доступы и материалы: если их нет в запросе, укажи это в missingInputs. Верни ответ строго в JSON без markdown и без дополнительных пояснений. Формат: {"title":"...","description":"...","requirements":"...","format":"online|hybrid|offline","workload":"up_to_3_hours|one_day|two_to_three_days|more_than_three_days","taskType":"content|design|website|bot|digitization|3d|setup|analytics|other","urgency":"normal|urgent","requiresOrgMaterials":true,"requiresOnsiteCheck":false,"parameterReason":"коротко почему выбраны параметры","missingInputs":["что учреждению нужно проверить перед публикацией"],"confidence":0.8}',
+          },
+          {
+            role: 'user',
+            text: prompt,
+          },
+        ])) || '';
+
+      normalized = normalizeGeneratedTaskBrief(extractJsonObject(reply), prompt);
+    } catch (aiError: any) {
+      console.error('YandexGPT task brief fallback:', aiError.response?.data || aiError.message || aiError);
+      normalized = buildFallbackTaskBrief(prompt);
     }
 
-    const parsed = extractJsonObject(reply);
-
     return res.json({
-      description: String(parsed.description || '').trim(),
-      requirements: String(parsed.requirements || '').trim(),
-      raw: reply,
+      ...normalized,
+      raw: reply || null,
     });
   } catch (error: any) {
     console.error(

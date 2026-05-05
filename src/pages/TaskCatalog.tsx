@@ -94,7 +94,7 @@ export const TaskCatalog: React.FC = () => {
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                className={`a11y-category-chip rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                   selectedCategory === category
                     ? 'bg-blue-600 text-white'
                     : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
@@ -133,19 +133,19 @@ export const TaskCatalog: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap gap-3 text-sm">
-            <div className="inline-flex items-center rounded-full bg-white px-3 py-2 border border-gray-200 text-gray-700">
+            <div className="a11y-task-chip a11y-force-accent inline-flex items-center rounded-full bg-white px-3 py-2 border border-gray-200 text-gray-700">
               <span className="mr-2 h-3 w-3 rounded-full bg-blue-600" />
               Онлайн
             </div>
-            <div className="inline-flex items-center rounded-full bg-white px-3 py-2 border border-gray-200 text-gray-700">
+            <div className="a11y-task-chip a11y-force-accent inline-flex items-center rounded-full bg-white px-3 py-2 border border-gray-200 text-gray-700">
               <span className="mr-2 h-3 w-3 rounded-full bg-violet-600" />
               Смешанная
             </div>
-            <div className="inline-flex items-center rounded-full bg-white px-3 py-2 border border-gray-200 text-gray-700">
+            <div className="a11y-task-chip a11y-force-accent inline-flex items-center rounded-full bg-white px-3 py-2 border border-gray-200 text-gray-700">
               <span className="mr-2 h-3 w-3 rounded-full bg-orange-500" />
               Очная
             </div>
-            <div className="inline-flex items-center rounded-full bg-white px-3 py-2 border border-gray-200 text-gray-700">
+            <div className="a11y-task-chip a11y-force-accent inline-flex items-center rounded-full bg-white px-3 py-2 border border-gray-200 text-gray-700">
               <span className="mr-2 h-3 w-3 rounded-full bg-green-600" />
               Мероприятие
             </div>
@@ -161,7 +161,7 @@ export const TaskCatalog: React.FC = () => {
                 <div className="p-6 flex-1">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex flex-wrap gap-2">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      <span className="a11y-category-chip inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                         {task.category}
                       </span>
                       {task.parentTaskTitle && (
@@ -170,7 +170,7 @@ export const TaskCatalog: React.FC = () => {
                         </span>
                       )}
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        className={`a11y-task-chip a11y-force-accent inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                           task.format === 'online'
                             ? 'bg-blue-50 text-blue-700'
                             : task.format === 'hybrid'

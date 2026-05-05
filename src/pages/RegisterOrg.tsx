@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getPendingTaskTemplateCreatePath } from '../lib/task-templates';
 
 export const RegisterOrg: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -66,7 +67,7 @@ export const RegisterOrg: React.FC = () => {
 
       setSuccess(true);
       setTimeout(() => {
-        navigate('/организация');
+        navigate(getPendingTaskTemplateCreatePath() || '/организация');
       }, 2000);
     } catch (err: any) {
       if (err.code !== 'auth/email-already-in-use') {

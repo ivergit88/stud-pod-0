@@ -216,7 +216,7 @@ export const TaskDetails: React.FC = () => {
                     Часть проекта
                   </span>
                 )}
-                <span className="a11y-task-chip a11y-force-accent inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                <span className="a11y-task-chip a11y-force-accent a11y-category-chip inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
                   {task.category}
                 </span>
                 <span
@@ -421,7 +421,7 @@ export const TaskDetails: React.FC = () => {
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap gap-2">
-                          <span className="a11y-task-chip a11y-force-accent rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+                          <span className="a11y-task-chip a11y-force-accent a11y-category-chip rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
                             {childTask.category}
                           </span>
                           <span className="a11y-task-chip a11y-force-accent rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
@@ -467,7 +467,7 @@ export const TaskDetails: React.FC = () => {
                     href={attachment.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                    className="a11y-material-link flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 hover:border-blue-300 hover:bg-blue-50 transition-colors"
                   >
                     <div className="min-w-0">
                       <div className="flex items-center text-gray-900 font-medium truncate">
@@ -495,7 +495,7 @@ export const TaskDetails: React.FC = () => {
                     href={attachment.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 hover:border-emerald-300 hover:bg-emerald-100 transition-colors"
+                    className="a11y-material-link flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 hover:border-emerald-300 hover:bg-emerald-100 transition-colors"
                   >
                     <div className="min-w-0">
                       <div className="flex items-center text-gray-900 font-medium truncate">
@@ -520,7 +520,7 @@ export const TaskDetails: React.FC = () => {
                 href={task.materialsLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700 font-medium hover:bg-blue-100 transition-colors break-all"
+                className="a11y-material-link inline-flex items-center rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700 font-medium hover:bg-blue-100 transition-colors break-all"
               >
                 <Paperclip className="w-4 h-4 mr-2 flex-shrink-0" />
                 {task.materialsLink}
@@ -535,7 +535,7 @@ export const TaskDetails: React.FC = () => {
                 href={parentTask.materialsLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800 font-medium hover:bg-emerald-100 transition-colors break-all"
+                className="a11y-material-link inline-flex items-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800 font-medium hover:bg-emerald-100 transition-colors break-all"
               >
                 <Paperclip className="w-4 h-4 mr-2 flex-shrink-0" />
                 {parentTask.materialsLink}
@@ -708,7 +708,7 @@ export const TaskDetails: React.FC = () => {
                         {member.skills && member.skills.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-2">
                             {member.skills.slice(0, 3).map((skill) => (
-                              <span key={skill} className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700">
+                              <span key={skill} className="a11y-task-chip a11y-force-accent rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700">
                                 {skill}
                               </span>
                             ))}
@@ -809,7 +809,7 @@ export const TaskDetails: React.FC = () => {
                           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                             <div className="min-w-0">
                               <div className="flex flex-wrap gap-2">
-                                <span className="a11y-task-chip a11y-force-accent rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+                                <span className="a11y-task-chip a11y-force-accent a11y-category-chip rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
                                   {childTask.category}
                                 </span>
                                 <span className="a11y-task-chip a11y-force-accent rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">

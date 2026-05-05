@@ -218,7 +218,7 @@ export const Portfolio: React.FC = () => {
                         {item.task?.title}
                       </Link>
                     </h3>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <span className="a11y-category-chip inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                       {item.task?.category}
                     </span>
                   </div>

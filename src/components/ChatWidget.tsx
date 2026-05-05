@@ -64,11 +64,12 @@ export const ChatWidget: React.FC = () => {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-20 right-4 z-50 flex items-center justify-center rounded-full bg-blue-600 p-4 text-white shadow-xl transition-all hover:scale-110 hover:bg-blue-700 md:bottom-8 md:right-8 group animate-bounce"
+        className="fixed bottom-20 right-4 z-50 inline-flex min-h-14 items-center justify-center gap-2 rounded-full bg-blue-600 px-4 py-3 text-white shadow-xl transition-colors hover:bg-blue-700 focus-visible:ring-4 focus-visible:ring-blue-200 md:bottom-8 md:right-8"
         title="Помощь ИИ"
+        aria-label="Открыть ИИ-помощника"
       >
         <MessageCircle className="h-6 w-6" />
-        <span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs group-hover:ml-2 transition-all duration-300 ease-in-out font-medium">
+        <span className="hidden whitespace-nowrap font-medium sm:inline">
           Помощь ИИ
         </span>
       </button>

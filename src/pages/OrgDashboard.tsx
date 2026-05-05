@@ -25,7 +25,11 @@ export const OrgDashboard: React.FC = () => {
   const tasksNeedingReview = orgTasks.filter((task) =>
     responses.some((response) => response.taskId === task.id && response.status === 'submitted'),
   );
-  const recentTasks = [...orgTasks]
+  const visibleOrgTasks = orgTasks.filter((task) => task.taskKind !== 'parent');
+  const activeOrgTasksCount = visibleOrgTasks.filter((task) =>
+    task.status === 'open' || task.status === 'in_progress' || task.status === 'review'
+  ).length;
+  const recentTasks = [...visibleOrgTasks]
     .filter((task) => task.taskKind !== 'parent')
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 3);
@@ -34,8 +38,8 @@ export const OrgDashboard: React.FC = () => {
     .slice(0, 3);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <div className="rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 to-white p-8">
+    <div className="org-dashboard-page mx-auto max-w-7xl space-y-8 py-6 sm:py-8">
+      <div className="rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 to-white p-5 sm:p-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Кабинет организации</h1>
@@ -74,7 +78,7 @@ export const OrgDashboard: React.FC = () => {
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
           <div className="text-sm font-medium text-gray-500">Активные задачи</div>
           <div className="mt-2 text-3xl font-bold text-gray-900">
-            {orgTasks.filter((task) => task.status === 'open' || task.status === 'in_progress' || task.status === 'review').length}
+            {activeOrgTasksCount}
           </div>
         </div>
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -109,7 +113,7 @@ export const OrgDashboard: React.FC = () => {
                 return (
                   <div key={task.id} className="p-6">
                     <div className="mb-3 flex flex-wrap gap-2">
-                      <span className="a11y-org-badge a11y-force-accent rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+                      <span className="a11y-org-badge a11y-force-accent a11y-category-chip rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
                         {task.category}
                       </span>
                       {task.parentTaskTitle && (

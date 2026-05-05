@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Студенческий подряд">
+  <rect width="64" height="64" rx="15" fill="#ffffff"/>
+  <path d="M38 26h17l3 5H35l3-5Z" fill="#0f172a"/>
+  <path d="M38 33h17v15H38V33Z" fill="#0f172a"/>
+  <path d="M41 35h4v10h-4V35Zm7 0h4v10h-4V35Z" fill="#ffffff" opacity=".9"/>
+  <circle cx="22" cy="24" r="11" fill="#0f6bff"/>
+  <path d="m16.5 24.2 4.2 4.1 7.9-8.2" fill="none" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="18" cy="41" r="5.4" fill="#0f6bff"/>
+  <circle cx="31" cy="41" r="5.4" fill="#0f6bff"/>
+  <path d="M8 54c3.7-8.4 11.3-8.4 15 0H8Zm14 0c3.8-8.4 11.5-8.4 15.2 0H22Z" fill="#0f6bff"/>
+  <path d="M14 51c11.5 8.2 29.2 5.2 38-6" fill="none" stroke="#0f6bff" stroke-width="4.5" stroke-linecap="round"/>
+</svg>

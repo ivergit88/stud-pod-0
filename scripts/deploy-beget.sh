@@ -51,6 +51,7 @@ tar -czf "${ARCHIVE_PATH}" \
   tsconfig.json \
   vite.config.ts \
   index.html \
+  public \
   src \
   scripts \
   deploy \

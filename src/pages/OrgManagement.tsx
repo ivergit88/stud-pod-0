@@ -10,17 +10,14 @@ export const OrgManagement: React.FC = () => {
   const { tasks, responses, events, deleteTask, deleteEvent } = useData();
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
-
-  if (!user || user.role !== 'organization') {
-    return <div>Доступ запрещен</div>;
-  }
+  const organizationId = user?.role === 'organization' ? user.id : '';
 
   const orgTasks = useMemo(
     () =>
       tasks
-        .filter((task) => task.organizationId === user.id)
+        .filter((task) => task.organizationId === organizationId)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    [tasks, user.id],
+    [tasks, organizationId],
   );
   const executableTasks = useMemo(
     () => orgTasks.filter((task) => task.taskKind !== 'parent'),
@@ -62,10 +59,14 @@ export const OrgManagement: React.FC = () => {
   const orgEvents = useMemo(
     () =>
       events
-        .filter((event) => event.organizationId === user.id)
+        .filter((event) => event.organizationId === organizationId)
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-    [events, user.id],
+    [events, organizationId],
   );
+
+  if (!user || user.role !== 'organization') {
+    return <div>Доступ запрещен</div>;
+  }
 
   const handleDeleteTask = async (taskId: string, title: string) => {
     const shouldDelete = window.confirm(`Удалить задачу "${title}"? Это действие нельзя отменить.`);
@@ -166,7 +167,7 @@ export const OrgManagement: React.FC = () => {
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <div className="mb-3 flex flex-wrap gap-2">
-                        <span className="a11y-org-badge a11y-force-accent rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+                        <span className="a11y-org-badge a11y-force-accent a11y-category-chip rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
                           {task.category}
                         </span>
                         {isProject && (
@@ -279,7 +280,7 @@ export const OrgManagement: React.FC = () => {
                                   {childTask.title}
                                 </Link>
                                 <div className="mt-2 flex flex-wrap gap-2">
-                                  <span className="a11y-org-badge a11y-force-accent rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+                                  <span className="a11y-org-badge a11y-force-accent a11y-category-chip rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
                                     {childTask.category}
                                   </span>
                                   <span className="a11y-org-badge a11y-force-accent rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">

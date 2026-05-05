@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Mail, Lock, LogIn, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { getPendingTaskTemplateCreatePath } from '../lib/task-templates';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -15,7 +16,10 @@ export const Login: React.FC = () => {
   // Redirect when user is loaded
   React.useEffect(() => {
     if (user) {
-      navigate(user.role === 'organization' ? '/организация' : '/студент');
+      const pendingTemplatePath =
+        user.role === 'organization' ? getPendingTaskTemplateCreatePath() : null;
+
+      navigate(pendingTemplatePath || (user.role === 'organization' ? '/организация' : '/студент'));
     }
   }, [user, navigate]);
 

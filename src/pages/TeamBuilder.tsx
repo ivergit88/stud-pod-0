@@ -220,8 +220,8 @@ export const TeamBuilder: React.FC = () => {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-8 rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-slate-50 p-8">
+    <div className="team-builder-page mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="team-builder-hero mb-8 rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-slate-50 p-8">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <h1 className="max-w-full break-words text-2xl font-bold leading-tight text-gray-900 sm:text-3xl">
@@ -256,13 +256,13 @@ export const TeamBuilder: React.FC = () => {
                 key={response.id}
                 type="button"
                 onClick={() => handleSelectResponse(response.id)}
-                className={`min-w-0 rounded-2xl border px-4 py-4 text-left transition-colors ${
+                className={`team-task-button min-w-0 rounded-2xl border px-4 py-4 text-left transition-colors ${
                   isActive
                     ? 'border-blue-600 bg-blue-50'
                     : 'border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50'
                 }`}
               >
-                <div className="break-words text-xs font-medium uppercase tracking-wide text-gray-500">
+                <div className="a11y-category-value break-words text-xs font-medium uppercase tracking-wide text-gray-500">
                   {response.task?.category} • {getTaskFormatLabel(response.task?.format)}
                 </div>
                 <div className="mt-2 break-words text-base font-semibold text-gray-900">{response.task?.title}</div>
@@ -335,7 +335,7 @@ export const TeamBuilder: React.FC = () => {
       </div>
 
       <div className="grid gap-8 xl:grid-cols-[1.2fr_0.8fr]">
-        <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+        <section className="team-candidate-section rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold text-gray-900">Карточка кандидата</h2>
@@ -349,32 +349,32 @@ export const TeamBuilder: React.FC = () => {
           </div>
 
           {currentCandidate ? (
-            <div className="relative">
+            <div className="team-candidate-stage relative">
               {nextCandidate && (
-                <div className="absolute inset-x-6 top-4 h-full rounded-[28px] border border-gray-200 bg-gray-100/80" />
+                <div className="team-candidate-backdrop absolute inset-x-6 top-4 h-full rounded-[28px] border border-gray-200 bg-gray-100/80" />
               )}
-              <div className="relative min-w-0 rounded-[32px] border border-gray-200 bg-gradient-to-br from-white via-blue-50 to-slate-100 p-5 shadow-sm sm:p-8">
+              <div className="team-candidate-card relative min-w-0 rounded-[32px] border border-gray-200 bg-gradient-to-br from-white via-blue-50 to-slate-100 p-5 shadow-sm sm:p-8">
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <div className="break-words text-sm font-medium text-blue-700">
                       {selectedTask?.title}
                     </div>
-                    <h3 className="mt-2 break-words text-2xl font-bold text-gray-900 sm:text-3xl">
+                    <h3 className="team-candidate-name mt-2 text-2xl font-bold leading-tight text-gray-900 sm:text-3xl">
                       {currentCandidate.name}
                     </h3>
-                    <div className="mt-3 flex flex-wrap gap-2 text-sm">
-                      <span className="break-words rounded-full bg-white px-3 py-1 font-medium text-gray-700">
+                    <div className="team-candidate-meta mt-3 flex flex-wrap gap-2 text-sm">
+                      <span className="team-profile-chip break-words rounded-full bg-white px-3 py-1 font-medium text-gray-700">
                         {currentCandidate.university || 'Вуз не указан'}
                       </span>
                       {currentCandidate.course && (
-                        <span className="rounded-full bg-white px-3 py-1 font-medium text-gray-700">
+                        <span className="team-profile-chip rounded-full bg-white px-3 py-1 font-medium text-gray-700">
                           {currentCandidate.course} курс
                         </span>
                       )}
-                      <span className="rounded-full bg-white px-3 py-1 font-medium text-gray-700">
+                      <span className="team-profile-chip rounded-full bg-white px-3 py-1 font-medium text-gray-700">
                         Выполнено: {currentCandidate.completedTasksCount}
                       </span>
-                      <span className="rounded-full bg-white px-3 py-1 font-medium text-gray-700">
+                      <span className="team-profile-chip rounded-full bg-white px-3 py-1 font-medium text-gray-700">
                         Баллы: {currentCandidate.points}
                       </span>
                     </div>
@@ -398,7 +398,7 @@ export const TeamBuilder: React.FC = () => {
                       currentCandidate.skills!.map((skill) => (
                         <span
                           key={skill}
-                          className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+                          className={`team-profile-chip rounded-full px-3 py-1.5 text-sm font-medium ${
                             selectedSkills.includes(skill)
                               ? 'bg-blue-700 text-white'
                               : 'bg-white text-blue-700 border border-blue-100'
@@ -448,7 +448,7 @@ export const TeamBuilder: React.FC = () => {
         </section>
 
         <aside className="space-y-6">
-          <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+          <section className="team-side-card rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold text-gray-900">Текущая команда</h2>
             <p className="mt-1 text-sm text-gray-600">
               Состав привязан к выбранной задаче. Здесь же можно убрать участника, если состав изменился.
@@ -480,18 +480,18 @@ export const TeamBuilder: React.FC = () => {
           </section>
 
           {selectedTask && (
-            <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+            <section className="team-side-card rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-bold text-gray-900">Параметры задачи</h2>
               <div className="mt-4 space-y-3 text-sm text-gray-600">
-                <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <div className="a11y-force-surface rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
                   <div className="text-xs uppercase tracking-wide text-gray-500">Категория</div>
-                  <div className="mt-1 font-semibold text-gray-900">{selectedTask.category}</div>
+                  <div className="a11y-category-value mt-1 font-semibold text-gray-900">{selectedTask.category}</div>
                 </div>
-                <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <div className="a11y-force-surface rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
                   <div className="text-xs uppercase tracking-wide text-gray-500">Формат</div>
                   <div className="mt-1 font-semibold text-gray-900">{getTaskFormatLabel(selectedTask.format)}</div>
                 </div>
-                <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <div className="a11y-force-surface rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
                   <div className="text-xs uppercase tracking-wide text-gray-500">Дедлайн</div>
                   <div className="mt-1 font-semibold text-gray-900">
                     {new Date(selectedTask.deadline).toLocaleDateString('ru-RU')}

@@ -35,7 +35,7 @@ export const Help: React.FC = () => {
         },
         body: JSON.stringify({
           messages: newMessages,
-          systemInstruction: 'Ты дружелюбный ИИ-помощник на платформе "Студенческий подряд". Твоя задача - помогать пользователям ориентироваться на сайте. Платформа предназначена для студентов, которые ищут подработку, и организаций, которые предлагают задачи. Основные разделы: Каталог задач, Моё портфолио, Офлайн мероприятия, Кабинет организации. Отвечай кратко, вежливо и по делу. Если вопрос не касается платформы, вежливо скажи, что можешь помочь только с вопросами по сайту.'
+          systemInstruction: 'Ты дружелюбный ИИ-помощник платформы "Студенческий подряд". Помогай пользователям ориентироваться на сайте и объясняй рабочий цикл простыми словами. Платформа предназначена для студентов 1-3 курсов ИТ-, дизайн- и медиа-направлений, которые выбирают прикладные микрозадачи для портфолио, и учреждений культуры, которые размещают цифровые задачи. Основные разделы: Каталог задач, Сокомандники, Моё портфолио, Офлайн мероприятия, Кабинет организации, Создание задачи и Управление публикациями. Отвечай кратко, вежливо и по делу. Если вопрос не касается платформы, вежливо скажи, что можешь помочь только с вопросами по сайту.'
         })
       });
 
@@ -67,9 +67,9 @@ export const Help: React.FC = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="md:col-span-1 space-y-6">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+      <div className="help-support-grid grid grid-cols-1 gap-8 md:grid-cols-[minmax(19rem,0.9fr)_minmax(0,2fr)]">
+        <div className="help-contact-column space-y-6">
+          <div className="a11y-help-contact-card a11y-force-surface bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Контакты</h2>
             <div className="space-y-4">
               <a 
@@ -77,7 +77,7 @@ export const Help: React.FC = () => {
                 className="flex items-center text-gray-600 hover:text-blue-700 transition-colors"
               >
                 <Mail className="h-5 w-5 mr-3 text-blue-500" />
-                <span>ershovivan2802@yandex.ru</span>
+                <span className="a11y-help-email">ershovivan2802@yandex.ru</span>
               </a>
               <a 
                 href="https://vk.com/id851472524" 
@@ -92,7 +92,7 @@ export const Help: React.FC = () => {
           </div>
         </div>
 
-        <div className="md:col-span-2">
+        <div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col h-[500px]">
             <div className="p-4 border-b border-gray-100 bg-gray-50 rounded-t-2xl flex items-center">
               <Bot className="h-6 w-6 text-blue-600 mr-2" />

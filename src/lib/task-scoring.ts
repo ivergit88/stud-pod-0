@@ -412,7 +412,7 @@ export function calculateTaskScorePreview(
           ? 'Без обязательного выезда.'
           : input.format === 'hybrid'
             ? 'Есть очная часть или координация на месте.'
-            : 'Нужен полноценный выезд или работа на площадке.',
+            : 'Нужен выезд или работа на площадке.',
     },
     {
       label: `Трудоемкость: ${TASK_WORKLOAD_LABELS[input.workload]}`,

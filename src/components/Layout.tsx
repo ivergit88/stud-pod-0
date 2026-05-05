@@ -69,16 +69,27 @@ export const Layout: React.FC = () => {
         Перейти к содержанию
       </a>
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex min-h-16 items-center justify-between gap-2 py-2">
-            <div className="flex items-center">
-              <Link to="/" className="flex-shrink-0 flex items-center">
-                <span className="max-w-[140px] text-base font-bold leading-tight text-blue-700 sm:max-w-none sm:text-2xl">
+        <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+          <div className="flex min-h-14 items-center gap-1.5 py-2 sm:min-h-16 sm:gap-2">
+            <div className="flex min-w-0 flex-1 items-center">
+              <Link
+                to="/"
+                aria-label="Студенческий подряд, главная страница"
+                className="flex min-w-0 max-w-full items-center gap-1.5 sm:gap-3"
+              >
+                <span className="site-logo-mark flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-950 ring-1 ring-blue-100 sm:h-12 sm:w-12">
+                  <img
+                    src="/logo-sp.png?v=6"
+                    alt=""
+                    className="site-logo-image h-full w-full object-contain"
+                  />
+                </span>
+                <span className="site-logo-title flex-shrink-0 whitespace-nowrap text-[13px] font-bold leading-tight tracking-[-0.02em] text-blue-700 sm:text-2xl sm:tracking-normal">
                   Студенческий подряд
                 </span>
               </Link>
             </div>
-            <div className="flex items-center space-x-2 sm:space-x-4">
+            <div className="flex shrink-0 items-center space-x-1 sm:space-x-4">
               <button 
                 onClick={() => {
                   if (a11yPanelOpen) {
@@ -150,9 +161,9 @@ export const Layout: React.FC = () => {
         />
       )}
 
-      <div className="flex-1 flex max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 md:pb-8 pb-36">
+      <div className="app-shell-content flex-1 flex max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8 md:pb-8 pb-36">
         {user && (
-          <aside className="w-64 flex-shrink-0 pr-8 hidden md:block">
+          <aside className="hidden w-72 flex-shrink-0 pr-6 md:block">
             <nav className="space-y-1">
               {user.role === 'student' && (
                 <>
@@ -231,8 +242,8 @@ export const Layout: React.FC = () => {
               </Link>
             </div>
             <div className="mt-8 md:mt-0 md:order-1">
-              <p className="text-center text-sm text-gray-500">
-                &copy; 2026 Проект конкурса Твой Ход. Хостинг: Российская Федерация. Обработка данных: 152-ФЗ.
+              <p className="max-w-3xl text-center text-sm leading-6 text-gray-500 md:text-left">
+                &copy; 2026 Студенческий подряд. Проект реализуется при поддержке Всероссийского студенческого проекта «Твой Ход» и Автономной некоммерческой организации высшего образования «Университет Неймарк».
               </p>
             </div>
           </div>
@@ -256,20 +267,20 @@ const NavLink: React.FC<{
   return (
     <Link
       to={to}
-      className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+      className={`group flex items-start px-3 py-2 text-sm font-medium rounded-md transition-colors ${
         isActive
           ? 'bg-blue-50 text-blue-700'
           : 'text-gray-700 hover:text-blue-700 hover:bg-blue-50'
       }`}
     >
       <span
-        className={`mr-3 flex-shrink-0 h-5 w-5 flex items-center justify-center transition-colors ${
+        className={`mr-3 mt-0.5 flex-shrink-0 h-5 w-5 flex items-center justify-center transition-colors ${
           isActive ? 'text-blue-700' : 'text-gray-400 group-hover:text-blue-700'
         }`}
       >
         {icon}
       </span>
-      <span className="truncate">{label}</span>
+      <span className="min-w-0 whitespace-normal break-words leading-tight">{label}</span>
     </Link>
   );
 };

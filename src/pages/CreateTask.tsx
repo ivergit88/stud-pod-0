@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { YMaps } from '@pbe/react-yandex-maps';
 import { Globe, MapPin, Paperclip, RefreshCw, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { AddressInput } from '../components/AddressInput';
@@ -10,6 +10,12 @@ import {
   type TaskAttachmentPayload,
 } from '../context/DataContext';
 import { apiRequest } from '../lib/api';
+import { buildTaskAutofillDraft } from '../lib/task-autofill';
+import {
+  clearPendingTaskTemplate,
+  getTaskTemplatePreset,
+  readPendingTaskTemplateId,
+} from '../lib/task-templates';
 import type { GeneratedProjectPlan } from '../lib/task-projects';
 import { TASK_FORMAT_OPTIONS, getTaskFormatLabel, type TaskFormat } from '../lib/tasks';
 import {
@@ -45,6 +51,21 @@ type TaskAttachmentFormValue =
   | ExistingTaskAttachmentFormValue
   | NewTaskAttachmentFormValue;
 
+type GeneratedTaskBrief = {
+  title?: string;
+  description?: string;
+  requirements?: string;
+  format?: TaskFormat;
+  workload?: TaskWorkload;
+  taskType?: TaskType;
+  urgency?: TaskUrgency;
+  requiresOrgMaterials?: boolean;
+  requiresOnsiteCheck?: boolean;
+  parameterReason?: string;
+  missingInputs?: string[];
+  confidence?: number;
+};
+
 const toDateInputValue = (value: string) => {
   if (!value) {
     return '';
@@ -65,6 +86,29 @@ const formatFileSize = (size: number) => {
   return `${(size / (1024 * 1024)).toFixed(1)} МБ`;
 };
 
+const isTaskFormatValue = (value: unknown): value is TaskFormat =>
+  TASK_FORMAT_OPTIONS.some((option) => option.value === value);
+
+const isTaskWorkloadValue = (value: unknown): value is TaskWorkload =>
+  TASK_WORKLOAD_OPTIONS.some((option) => option.value === value);
+
+const isTaskTypeValue = (value: unknown): value is TaskType =>
+  TASK_TYPE_OPTIONS.some((option) => option.value === value);
+
+const isTaskUrgencyValue = (value: unknown): value is TaskUrgency =>
+  TASK_URGENCY_OPTIONS.some((option) => option.value === value);
+
+const getGeneratedText = (value: unknown, fallback: string) =>
+  typeof value === 'string' && value.trim() ? value.trim() : fallback;
+
+const getGeneratedList = (value: unknown, fallback: string[]) =>
+  Array.isArray(value)
+    ? value
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+        .slice(0, 4)
+    : fallback;
+
 const readFileAsBase64 = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -82,6 +126,8 @@ export const CreateTask: React.FC = () => {
   const { tasks, responses, loading, addTask, publishTaskProject, updateTask } = useData();
   const navigate = useNavigate();
   const { id: taskId } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const templateAppliedRef = useRef(false);
   const isEditMode = Boolean(taskId);
   const existingTask = isEditMode ? tasks.find((task) => task.id === taskId) : undefined;
 
@@ -107,6 +153,8 @@ export const CreateTask: React.FC = () => {
   const [projectSummary, setProjectSummary] = useState('');
   const [projectRequirements, setProjectRequirements] = useState('');
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedProjectPlan | null>(null);
+  const [aiSuggestionNote, setAiSuggestionNote] = useState('');
+  const [autofillMissingInputs, setAutofillMissingInputs] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -143,6 +191,94 @@ export const CreateTask: React.FC = () => {
       trustProfile,
     ],
   );
+
+  const applyGeneratedTaskBrief = (
+    result: GeneratedTaskBrief,
+    localDraft: ReturnType<typeof buildTaskAutofillDraft>,
+    noteLead: string,
+  ) => {
+    const missingInputs = getGeneratedList(result.missingInputs, localDraft.missingInputs);
+
+    setFormData((prev) => {
+      const nextFormat = isTaskFormatValue(result.format) ? result.format : localDraft.format;
+      const nextWorkload = isTaskWorkloadValue(result.workload) ? result.workload : localDraft.workload;
+      const nextTaskType = isTaskTypeValue(result.taskType) ? result.taskType : localDraft.taskType;
+      const nextUrgency = isTaskUrgencyValue(result.urgency) ? result.urgency : localDraft.urgency;
+      const nextRequiresOrgMaterials =
+        typeof result.requiresOrgMaterials === 'boolean'
+          ? result.requiresOrgMaterials
+          : localDraft.requiresOrgMaterials;
+      const nextRequiresOnsiteCheck =
+        nextFormat === 'online'
+          ? false
+          : typeof result.requiresOnsiteCheck === 'boolean'
+            ? result.requiresOnsiteCheck
+            : localDraft.requiresOnsiteCheck;
+      const nextScoring = calculateTaskScorePreview(
+        {
+          format: nextFormat,
+          workload: nextWorkload,
+          taskType: nextTaskType,
+          urgency: nextUrgency,
+          requiresOrgMaterials: nextRequiresOrgMaterials,
+          requiresOnsiteCheck: nextRequiresOnsiteCheck,
+        },
+        trustProfile,
+      );
+
+      return {
+        ...prev,
+        title: getGeneratedText(result.title, localDraft.title),
+        description: getGeneratedText(result.description, localDraft.description),
+        requirements: getGeneratedText(result.requirements, localDraft.requirements),
+        format: nextFormat,
+        workload: nextWorkload,
+        taskType: nextTaskType,
+        urgency: nextUrgency,
+        requiresOrgMaterials: nextRequiresOrgMaterials,
+        requiresOnsiteCheck: nextRequiresOnsiteCheck,
+        pointsReward: Math.min(
+          Math.max(nextScoring.recommended, nextScoring.minimum),
+          nextScoring.allowedMaximum,
+        ),
+      };
+    });
+
+    setAutofillMissingInputs(missingInputs);
+    setAiSuggestionNote(
+      [
+        noteLead,
+        getGeneratedText(result.parameterReason, localDraft.parameterReason),
+        'Дедлайн, адрес и материалы не придумываются автоматически: проверьте их перед публикацией.',
+      ].join(' '),
+    );
+  };
+
+  useEffect(() => {
+    if (isEditMode || templateAppliedRef.current) {
+      return;
+    }
+
+    const templateFromUrl = getTaskTemplatePreset(searchParams.get('template'));
+    const pendingTemplate = getTaskTemplatePreset(readPendingTaskTemplateId());
+    const selectedTemplate = templateFromUrl || pendingTemplate;
+
+    if (!selectedTemplate) {
+      return;
+    }
+
+    templateAppliedRef.current = true;
+    const localDraft = buildTaskAutofillDraft(selectedTemplate.prompt);
+
+    setPublicationMode('manual');
+    setSimplePrompt(selectedTemplate.prompt);
+    applyGeneratedTaskBrief(
+      localDraft,
+      localDraft,
+      `Выбран готовый формат: ${selectedTemplate.label}. Поля формы заполнены автоматически, их можно отредактировать перед публикацией.`,
+    );
+    clearPendingTaskTemplate();
+  }, [isEditMode, searchParams, trustProfile]);
 
   useEffect(() => {
     if (!existingTask) {
@@ -201,31 +337,50 @@ export const CreateTask: React.FC = () => {
   }, [publicationMode, isEditMode]);
 
   const handleGenerateAI = async () => {
-    if (!simplePrompt.trim()) {
+    const prompt = simplePrompt.trim();
+
+    if (!prompt) {
       return;
     }
 
     setIsGenerating(true);
+    const localDraft = buildTaskAutofillDraft(prompt);
+    let result: GeneratedTaskBrief = localDraft;
+    let usedBuiltInAutofill = false;
 
     try {
-      const result = await apiRequest<{ description: string; requirements: string }>(
+      const apiResult = await apiRequest<GeneratedTaskBrief>(
         '/api/ai/task-brief',
         {
           method: 'POST',
           body: JSON.stringify({
-            simplePrompt,
+            simplePrompt: prompt,
           }),
         },
       );
 
-      setFormData((prev) => ({
-        ...prev,
-        description: result.description || prev.description,
-        requirements: result.requirements || prev.requirements,
-      }));
+      result = {
+        ...localDraft,
+        ...apiResult,
+        missingInputs: getGeneratedList(apiResult.missingInputs, localDraft.missingInputs),
+      };
     } catch (error) {
-      console.error('AI generation error:', error);
-      alert('Ошибка при генерации ТЗ. Попробуйте переформулировать запрос.');
+      console.warn('Task autofill API fallback:', error);
+      usedBuiltInAutofill = true;
+      result = localDraft;
+    }
+
+    try {
+      applyGeneratedTaskBrief(
+        result,
+        localDraft,
+        usedBuiltInAutofill
+          ? 'Карточка заполнена по встроенным правилам платформы.'
+          : 'Карточка заполнена по описанию учреждения.',
+      );
+    } catch (error) {
+      console.error('Task autofill error:', error);
+      alert('Не удалось применить автозаполнение. Попробуйте переформулировать запрос.');
     } finally {
       setIsGenerating(false);
     }
@@ -505,7 +660,7 @@ export const CreateTask: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="create-task-page mx-auto max-w-4xl min-w-0 px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">
           {isEditMode ? 'Редактирование задачи' : 'Создание новой задачи'}
@@ -514,14 +669,14 @@ export const CreateTask: React.FC = () => {
           {isEditMode
             ? 'Обновите описание, параметры сложности и диапазон баллов, пока задача открыта.'
             : publicationMode === 'project'
-              ? 'Опишите большой проект, а система предложит связанные мини-задачи и автоматически назначит баллы.'
+              ? 'Опишите большой проект, а система предложит связанные мини-задачи и рекомендуемые баллы.'
               : 'Система сама подскажет честный диапазон баллов по параметрам задачи.'}
         </p>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-4 sm:p-8">
         {!isEditMode && (
-          <div className="a11y-publication-selector mb-8 rounded-3xl border-2 border-blue-200 bg-blue-50 p-5 shadow-sm">
+          <div className="a11y-publication-selector mb-8 rounded-3xl border-2 border-blue-200 bg-blue-50 p-4 shadow-sm sm:p-5">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <div className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
@@ -545,15 +700,15 @@ export const CreateTask: React.FC = () => {
                 type="button"
                 onClick={() => setPublicationMode('manual')}
                 aria-pressed={publicationMode === 'manual'}
-                className={`a11y-publication-card rounded-2xl border-2 px-5 py-5 text-left transition-all ${
+                className={`a11y-publication-card rounded-2xl border-2 px-4 py-5 text-left transition-all sm:px-5 ${
                   publicationMode === 'manual'
                     ? 'is-active border-blue-700 bg-white text-gray-900 shadow-md'
                     : 'border-white bg-white/65 text-gray-700 hover:border-blue-300 hover:bg-white'
                 }`}
               >
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="text-lg font-extrabold">Одна задача вручную</div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${
+                  <span className={`publication-mode-badge inline-flex shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${
                     publicationMode === 'manual'
                       ? 'bg-blue-700 text-white'
                       : 'bg-gray-100 text-gray-700'
@@ -569,15 +724,15 @@ export const CreateTask: React.FC = () => {
                 type="button"
                 onClick={() => setPublicationMode('project')}
                 aria-pressed={publicationMode === 'project'}
-                className={`a11y-publication-card rounded-2xl border-2 px-5 py-5 text-left transition-all ${
+                className={`a11y-publication-card rounded-2xl border-2 px-4 py-5 text-left transition-all sm:px-5 ${
                   publicationMode === 'project'
                     ? 'is-active border-emerald-700 bg-white text-gray-900 shadow-md'
                     : 'border-white bg-white/65 text-gray-700 hover:border-emerald-300 hover:bg-white'
                 }`}
               >
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="text-lg font-extrabold">Один проект → несколько подзадач</div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${
+                  <span className={`publication-mode-badge inline-flex shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${
                     publicationMode === 'project'
                       ? 'bg-emerald-700 text-white'
                       : 'bg-gray-100 text-gray-700'
@@ -586,10 +741,10 @@ export const CreateTask: React.FC = () => {
                   </span>
                 </div>
                 <div className="mt-2 text-sm leading-6 text-gray-600">
-                  Вы описываете большую задачу обычным языком, а система сама предлагает мини-задачи и баллы.
+                  Вы описываете большую задачу обычным языком, а система предлагает мини-задачи и рекомендуемые баллы.
                 </div>
                 <div className="mt-4 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
-                  Рекомендуется для отчётности: один запрос учреждения может дать несколько связанных задач.
+                  Рекомендуется: один запрос учреждения может дать несколько связанных задач.
                 </div>
               </button>
             </div>
@@ -598,24 +753,28 @@ export const CreateTask: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {publicationMode === 'manual' || isEditMode ? (
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-2xl border border-blue-100">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-2xl border border-blue-100 sm:p-6">
               <div className="flex items-start mb-4">
                 <div className="bg-blue-600 p-2 rounded-lg text-white mr-3">
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-blue-900">ИИ-помощник: Перевод в ТЗ</h3>
+                  <h3 className="text-lg font-bold text-blue-900">Автозаполнение карточки задачи</h3>
                   <p className="text-sm text-blue-700">
-                    Опишите задачу простыми словами, а ЯндексGPT превратит ее в понятное техническое
-                    задание для студента.
+                    Опишите потребность простыми словами. Система заполнит название, описание,
+                    требования, формат, трудоёмкость, тип задачи и рекомендуемые баллы.
                   </p>
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
                 <textarea
                   value={simplePrompt}
-                  onChange={(e) => setSimplePrompt(e.target.value)}
-                  placeholder="Например: нужна афиша для концерта классической музыки"
+                  onChange={(e) => {
+                    setSimplePrompt(e.target.value);
+                    setAiSuggestionNote('');
+                    setAutofillMissingInputs([]);
+                  }}
+                  placeholder="Например: нужна афиша для концерта классической музыки, материалы есть, дедлайн до пятницы"
                   className="flex-1 px-4 py-2 border border-blue-200 rounded-xl focus:ring-blue-500 focus:border-blue-500 resize-none"
                   rows={2}
                 />
@@ -623,14 +782,30 @@ export const CreateTask: React.FC = () => {
                   type="button"
                   onClick={handleGenerateAI}
                   disabled={isGenerating || !simplePrompt.trim()}
-                  className="px-6 py-2 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-colors disabled:bg-blue-300 flex items-center justify-center whitespace-nowrap"
+                  className="create-task-ai-button px-4 py-2 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-colors disabled:bg-blue-300 flex items-center justify-center sm:px-6"
                 >
-                  {isGenerating ? 'Генерация...' : 'Создать ТЗ'}
+                  {isGenerating ? 'Заполняем...' : 'Автозаполнить карточку'}
                 </button>
               </div>
+              {aiSuggestionNote && (
+                <div className="mt-3 rounded-xl border border-blue-200 bg-white/85 px-4 py-3 text-sm text-blue-950">
+                  <div className="font-semibold">Автозаполнение применено</div>
+                  <p className="mt-1 leading-6">{aiSuggestionNote}</p>
+                  {autofillMissingInputs.length > 0 && (
+                    <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-amber-900">
+                      <div className="font-semibold">Проверьте перед публикацией:</div>
+                      <ul className="mt-1 list-disc space-y-1 pl-5">
+                        {autofillMissingInputs.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
-            <div className="a11y-force-surface rounded-2xl border border-blue-100 bg-blue-50 p-6">
+            <div className="a11y-force-surface rounded-2xl border border-blue-100 bg-blue-50 p-4 sm:p-6">
               <div className="flex items-start gap-3">
                 <div className="rounded-lg bg-blue-600 p-2 text-white">
                   <Sparkles className="h-5 w-5" />
@@ -640,7 +815,7 @@ export const CreateTask: React.FC = () => {
                   <p className="mt-1 text-sm leading-6 text-blue-800">
                     Этот режим нужен для больших задач. Вы описываете проект целиком, а система
                     предлагает несколько исполнимых подзадач с понятными результатами и
-                    автоматически назначенными баллами.
+                    рекомендуемыми баллами.
                   </p>
                 </div>
               </div>
@@ -882,7 +1057,7 @@ export const CreateTask: React.FC = () => {
                 </div>
               </div>
 
-              <div className="a11y-score-panel rounded-3xl border border-blue-200 bg-white p-6">
+              <div className="a11y-score-panel rounded-3xl border border-blue-200 bg-white p-4 sm:p-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                   <div className="w-fit rounded-2xl bg-blue-600 p-2 text-white">
                     <ShieldCheck className="h-5 w-5" />
@@ -969,7 +1144,7 @@ export const CreateTask: React.FC = () => {
           ) : (
             <div className="a11y-force-surface rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm leading-6 text-emerald-900">
               В проектном режиме система сама разобьёт большую задачу на отдельные карточки для
-              студентов и назначит баллы каждой подзадаче. Ручная настройка баллов остаётся в
+              студентов и предложит баллы для каждой подзадачи. Ручная настройка баллов остаётся в
               обычном режиме публикации.
             </div>
           )}
@@ -1153,7 +1328,7 @@ export const CreateTask: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="a11y-project-plan space-y-4 rounded-3xl border border-blue-100 bg-blue-50 p-6">
+            <div className="a11y-project-plan space-y-4 rounded-3xl border border-blue-100 bg-blue-50 p-4 sm:p-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="text-lg font-bold text-blue-900">Автоматический план проекта</h3>
@@ -1223,7 +1398,7 @@ export const CreateTask: React.FC = () => {
               ) : (
                 <div className="a11y-force-surface rounded-2xl border border-dashed border-blue-200 bg-white px-5 py-4 text-sm font-semibold leading-6 text-gray-700">
                   После генерации здесь появится обзор проекта и набор мини-задач с автоматически
-                  назначенными баллами.
+                  рассчитанными рекомендациями по баллам.
                 </div>
               )}
             </div>

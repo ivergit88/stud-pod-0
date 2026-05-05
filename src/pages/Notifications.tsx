@@ -41,10 +41,10 @@ export const Notifications: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center">
+    <div className="notifications-page mx-auto max-w-4xl px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mb-8 flex min-w-0 items-center justify-between">
+        <div className="min-w-0">
+          <h1 className="flex items-center text-3xl font-bold text-gray-900">
             <Bell className="w-8 h-8 mr-3 text-blue-600" />
             Уведомления
           </h1>
@@ -58,18 +58,18 @@ export const Notifications: React.FC = () => {
             {userNotifications.map(notification => (
               <div 
                 key={notification.id} 
-                className={`a11y-notification-card cursor-pointer p-6 transition-colors ${notification.read ? 'bg-white' : 'bg-blue-50/50'} flex items-start`}
+                className={`a11y-notification-card cursor-pointer p-4 transition-colors sm:p-6 ${notification.read ? 'bg-white' : 'bg-blue-50/50'} flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start`}
                 onClick={() => handleOpenNotification(notification.id, notification.link)}
               >
-                <div className="flex-shrink-0 mr-4 mt-1">
+                <div className="flex-shrink-0 sm:mr-4 sm:mt-1">
                   {getIcon((notification as any).type)}
                 </div>
-                <div className="flex-1">
-                  <div className="flex justify-between items-start mb-1">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                     <h3 className={`text-lg font-medium ${notification.read ? 'text-gray-900' : 'text-blue-900 font-bold'}`}>
                       {notification.title}
                     </h3>
-                    <span className="text-xs text-gray-500 whitespace-nowrap ml-4">
+                    <span className="text-xs text-gray-500 sm:ml-4 sm:whitespace-nowrap">
                       {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </span>
                   </div>
@@ -78,7 +78,7 @@ export const Notifications: React.FC = () => {
                   </p>
                 </div>
                 {!notification.read && (
-                  <div className="ml-4 flex-shrink-0">
+                  <div className="flex-shrink-0 sm:ml-4">
                     <span className="a11y-notification-count a11y-force-accent inline-flex min-h-6 items-center justify-center rounded-full bg-blue-600 px-2 text-xs font-semibold text-white">
                       Новое
                     </span>
