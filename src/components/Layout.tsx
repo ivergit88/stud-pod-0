@@ -234,16 +234,16 @@ export const Layout: React.FC = () => {
       )}
 
       <footer className="bg-white border-t border-gray-200 mt-auto hidden md:block">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="md:flex md:items-center md:justify-between">
             <div className="flex justify-center md:justify-start space-x-6 md:order-2">
               <Link to="/конфиденциальность" className="text-sm text-gray-500 hover:text-gray-900">
                 Политика конфиденциальности
               </Link>
             </div>
-            <div className="mt-8 md:mt-0 md:order-1">
-              <p className="max-w-3xl text-center text-sm leading-6 text-gray-500 md:text-left">
-                &copy; 2026 Студенческий подряд. Проект реализуется при поддержке Всероссийского студенческого проекта «Твой Ход» и Автономной некоммерческой организации высшего образования «Университет Неймарк».
+            <div className="mt-4 md:mt-0 md:order-1">
+              <p className="max-w-4xl text-center text-xs leading-5 text-gray-500 md:text-left">
+                &copy; 2026 Студенческий подряд. Проект реализуется в рамках трека «Делаю» Всероссийского студенческого проекта «Твой Ход» при поддержке Автономной некоммерческой организации высшего образования «Университет Неймарк».
               </p>
             </div>
           </div>

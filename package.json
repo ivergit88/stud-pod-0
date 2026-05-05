@@ -14,6 +14,8 @@
     "start": "node --import tsx server.ts",
     "start:all": "npm install && npm run dev",
     "import:firebase": "node --import tsx scripts/import-firebase-export.ts",
+    "db": "node --import tsx scripts/db-admin.ts",
+    "db:seed-demo": "node --import tsx scripts/seed-demo-platform-data.ts",
     "deploy": "./scripts/deploy-beget.sh",
     "fetchenv": "./scripts/fetch-beget-env.sh",
     "domain": "./scripts/configure-beget-domain.sh"

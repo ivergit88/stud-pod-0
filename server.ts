@@ -911,6 +911,10 @@ function mapUser(row?: DbRow | null): CurrentUser | null {
   };
 }
 
+function isUserBlocked(row?: DbRow | CurrentUser | null) {
+  return String(row?.status || '').trim().toLowerCase() === 'blocked';
+}
+
 function mapTask(row: DbRow) {
   const scoringInput = buildTaskScoringInput(row);
   const explanation = parseStringArray(row.pointsExplanation);
@@ -1462,7 +1466,7 @@ async function generateProjectPlanWithAi(
 
 async function attachCurrentUser(
   req: AuthenticatedRequest,
-  _res: Response,
+  res: Response,
   next: NextFunction,
 ) {
   const token = req.cookies?.[SESSION_COOKIE_NAME];
@@ -1476,6 +1480,11 @@ async function attachCurrentUser(
     const payload = jwt.verify(token, getJwtSecret()) as SessionPayload;
     const db = await initDb();
     const row = await db.get('SELECT * FROM users WHERE id = ?', payload.userId);
+    if (isUserBlocked(row)) {
+      clearSessionCookie(res);
+      req.currentUser = null;
+      return next();
+    }
     req.currentUser = mapUser(row);
   } catch {
     req.currentUser = null;
@@ -1489,6 +1498,11 @@ function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunctio
     return sendError(res, 401, 'Требуется авторизация');
   }
 
+  if (isUserBlocked(req.currentUser)) {
+    clearSessionCookie(res);
+    return sendError(res, 403, 'Пользователь заблокирован. Обратитесь к администратору.');
+  }
+
   return next();
 }
 
@@ -1496,6 +1510,11 @@ function requireRole(roles: CurrentUser['role'][]) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.currentUser) {
       return sendError(res, 401, 'Требуется авторизация');
+    }
+
+    if (isUserBlocked(req.currentUser)) {
+      clearSessionCookie(res);
+      return sendError(res, 403, 'Пользователь заблокирован. Обратитесь к администратору.');
     }
 
     if (!roles.includes(req.currentUser.role)) {
@@ -1748,6 +1767,16 @@ app.post('/api/auth/login', rateLimitAuth, async (req: AuthenticatedRequest, res
         401,
         'Неверный email или пароль',
         'auth/invalid-credential',
+      );
+    }
+
+    if (isUserBlocked(row)) {
+      clearSessionCookie(res);
+      return sendError(
+        res,
+        403,
+        'Пользователь заблокирован. Обратитесь к администратору.',
+        'auth/user-blocked',
       );
     }
 

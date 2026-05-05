@@ -47,7 +47,7 @@ export const Store: React.FC = () => {
                 )}
                 <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-bold text-blue-600 shadow-sm flex items-center">
                   <Star className="w-4 h-4 mr-1 fill-current" />
-                  {product.price}
+                  {product.price.toLocaleString('ru-RU')} баллов
                 </div>
               </div>
               <div className="p-5 flex-1 flex flex-col">

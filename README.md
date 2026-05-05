@@ -155,6 +155,8 @@ npm run domain
 - `scripts/deploy-beget.sh` — основной деплой на текущий VPS
 - `scripts/fetch-beget-env.sh` — забрать `.env` с сервера
 - `scripts/configure-beget-domain.sh` — настройка домена и HTTPS
+- `scripts/db-admin.ts` — просмотр базы, пользователи, товары, блокировка/разблокировка
+- `scripts/seed-demo-platform-data.ts` — демонстрационные студенты и партнёрский мерч
 - `scripts/import-firebase-export.ts` — импорт старых данных из JSON
 
 ### Папка `deploy`
@@ -240,6 +242,99 @@ npm run domain
 ```
 
 Это важно: папка с кодом при каждом деплое пересоздаётся, а папка с данными должна жить отдельно.
+
+## Полный контроль базы данных
+
+Для базы есть npm-команда:
+
+```bash
+cd /home/admin1/stud-pod
+npm run db -- stats
+npm run db -- users
+npm run db -- products
+```
+
+Что можно делать:
+
+- `npm run db -- stats` — посмотреть количество студентов, организаций, задач, товаров и покупок
+- `npm run db -- users` — вывести пользователей
+- `npm run db -- users ivan` — найти пользователя по ФИО, email, роли или статусу
+- `npm run db -- products` — посмотреть товары магазина
+- `npm run db -- block user@mail.ru` — заблокировать подозрительного пользователя
+- `npm run db -- unblock user@mail.ru` — разблокировать пользователя
+- `npm run db:seed-demo` — добавить демонстрационных студентов и партнёрский мерч, скрипт идемпотентный и не плодит дубли
+
+Блокировка работает через поле `users.status = 'blocked'`. Такой пользователь не сможет войти, а активная сессия будет сброшена при следующем запросе к серверу.
+
+### Управление продовой базой на VPS
+
+На сервере важно работать именно с этой базой:
+
+```bash
+/root/stud-pod-data/database.sqlite
+```
+
+Не путать с файлом:
+
+```bash
+/root/stud-pod/database.sqlite
+```
+
+Файл в `/root/stud-pod` лежит рядом с кодом и не используется systemd-сервисом. Рабочая база сайта задаётся через `DATABASE_PATH=/root/stud-pod-data/database.sqlite`.
+
+Проверить продовую статистику:
+
+```bash
+ssh -p 22 root@159.194.208.82 "cd /root/stud-pod && DATABASE_PATH=/root/stud-pod-data/database.sqlite npm run db -- stats"
+```
+
+Посмотреть пользователей на проде:
+
+```bash
+ssh -p 22 root@159.194.208.82 "cd /root/stud-pod && DATABASE_PATH=/root/stud-pod-data/database.sqlite npm run db -- users"
+```
+
+Найти пользователя:
+
+```bash
+ssh -p 22 root@159.194.208.82 "cd /root/stud-pod && DATABASE_PATH=/root/stud-pod-data/database.sqlite npm run db -- users ivan"
+```
+
+Заблокировать подозрительного пользователя:
+
+```bash
+ssh -p 22 root@159.194.208.82 "cd /root/stud-pod && DATABASE_PATH=/root/stud-pod-data/database.sqlite npm run db -- block user@mail.ru"
+```
+
+Разблокировать пользователя:
+
+```bash
+ssh -p 22 root@159.194.208.82 "cd /root/stud-pod && DATABASE_PATH=/root/stud-pod-data/database.sqlite npm run db -- unblock user@mail.ru"
+```
+
+Посмотреть товары магазина:
+
+```bash
+ssh -p 22 root@159.194.208.82 "cd /root/stud-pod && DATABASE_PATH=/root/stud-pod-data/database.sqlite npm run db -- products"
+```
+
+Добавить демонстрационные данные в продовую базу:
+
+```bash
+ssh -p 22 root@159.194.208.82 "cd /root/stud-pod && DATABASE_PATH=/root/stud-pod-data/database.sqlite npm run db:seed-demo"
+```
+
+Перед ручными операциями с базой лучше сделать копию:
+
+```bash
+ssh -p 22 root@159.194.208.82 "cp /root/stud-pod-data/database.sqlite /root/stud-pod-data/database.sqlite.backup"
+```
+
+Скачать базу для локального анализа:
+
+```bash
+scp -P 22 root@159.194.208.82:/root/stud-pod-data/database.sqlite ./database.prod.sqlite
+```
 
 ## Локальный запуск с нуля
 

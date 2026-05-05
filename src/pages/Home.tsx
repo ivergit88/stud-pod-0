@@ -491,9 +491,6 @@ export const Home: React.FC = () => {
                 </div>
               ))}
             </div>
-            <p className="home-reveal home-reveal-4 mt-4 max-w-3xl rounded-2xl border border-blue-100 bg-white/85 px-4 py-3 text-sm font-semibold leading-6 text-slate-700 shadow-sm">
-              Проект реализуется при поддержке Всероссийского студенческого проекта «Твой Ход» и Автономной некоммерческой организации высшего образования «Университет Неймарк».
-            </p>
             {!user && (
               <div className="home-reveal home-reveal-5 flex flex-col gap-4 pt-8 sm:flex-row">
                 <button
