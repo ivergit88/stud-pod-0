@@ -1,0 +1,14 @@
+# Android-проект «Студенческий подряд»
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Секреты подписи — никогда в git
+keystore.properties
+*.keystore
+*.jks

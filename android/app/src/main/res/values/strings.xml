@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Студенческий подряд</string>
+    <string name="notifications_channel_name">Уведомления портала</string>
+    <string name="notifications_channel_description">Новые задачи, статусы и комментарии по вашим откликам</string>
+</resources>

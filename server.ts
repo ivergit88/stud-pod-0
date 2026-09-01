@@ -10,6 +10,7 @@ import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 import { initDb } from './database';
+import { createMobileApiRouter } from './src/server/mobile-api';
 import {
   calculateOrganizationTrust,
   calculateTaskScorePreview,
@@ -1295,8 +1296,8 @@ async function ensureUpcomingDeadlineNotifications(studentId: string) {
   }
 }
 
-function setSessionCookie(res: Response, user: CurrentUser) {
-  const token = jwt.sign(
+function createSessionToken(user: CurrentUser) {
+  return jwt.sign(
     {
       userId: user.id,
       role: user.role,
@@ -1306,6 +1307,10 @@ function setSessionCookie(res: Response, user: CurrentUser) {
       expiresIn: '30d',
     },
   );
+}
+
+function setSessionCookie(res: Response, user: CurrentUser) {
+  const token = createSessionToken(user);
 
   res.cookie(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
@@ -1469,7 +1474,12 @@ async function attachCurrentUser(
   res: Response,
   next: NextFunction,
 ) {
-  const token = req.cookies?.[SESSION_COOKIE_NAME];
+  // Мобильный клиент присылает JWT в заголовке Authorization: Bearer <token>,
+  // веб-версия продолжает работать через httpOnly-cookie.
+  const bearerToken = req.headers.authorization?.startsWith('Bearer ')
+    ? String(req.headers.authorization).slice('Bearer '.length).trim()
+    : undefined;
+  const token = bearerToken || req.cookies?.[SESSION_COOKIE_NAME];
 
   if (!token) {
     req.currentUser = null;
@@ -1732,7 +1742,7 @@ app.post('/api/auth/register', rateLimitAuth, async (req: AuthenticatedRequest, 
     }
 
     setSessionCookie(res, user);
-    return res.status(201).json({ user });
+    return res.status(201).json({ user, token: createSessionToken(user) });
   } catch (error) {
     console.error('Registration error:', error);
     return sendError(res, 500, 'Ошибка при регистрации');
@@ -1787,7 +1797,7 @@ app.post('/api/auth/login', rateLimitAuth, async (req: AuthenticatedRequest, res
     }
 
     setSessionCookie(res, user);
-    return res.json({ user });
+    return res.json({ user, token: createSessionToken(user) });
   } catch (error) {
     console.error('Login error:', error);
     return sendError(res, 500, 'Ошибка при входе');
@@ -3430,6 +3440,23 @@ app.post(
       return sendError(res, 500, 'Не удалось отметить уведомление');
     }
   },
+);
+
+// Мобильный REST API для Android-клиента (Bearer JWT, пагинация, точечные выборки).
+app.use(
+  '/api',
+  createMobileApiRouter({
+    initDb,
+    sendError,
+    requireAuth,
+    requireRole,
+    mapTask,
+    mapTaskResponse,
+    mapNotification,
+    getTaskRowById,
+    getTaskResponseMembers,
+    taskSelectFields: TASK_SELECT_FIELDS,
+  }),
 );
 
 async function syncTaskDerivedFields() {

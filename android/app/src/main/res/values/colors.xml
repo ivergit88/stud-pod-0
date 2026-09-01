@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Палитра портала «Студенческий подряд» -->
+    <color name="portal_blue">#2563EB</color>
+    <color name="portal_blue_dark">#1D4ED8</color>
+    <color name="portal_bg">#F8FAFC</color>
+    <color name="portal_slate">#0F172A</color>
+
+    <!-- Adaptive icon -->
+    <color name="ic_launcher_background">#2563EB</color>
+</resources>
