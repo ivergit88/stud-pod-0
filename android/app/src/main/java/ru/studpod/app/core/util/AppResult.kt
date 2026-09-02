@@ -1,5 +1,9 @@
 package ru.studpod.app.core.util
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import retrofit2.HttpException
 import java.io.IOException
 
@@ -37,7 +41,7 @@ suspend fun <T> safeApiCall(block: suspend () -> T): AppResult<T> {
 private fun parseServerError(body: String): String? {
     if (body.isBlank()) return null
     return runCatching {
-        kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        Json { ignoreUnknownKeys = true }
             .parseToJsonElement(body)
             .jsonObject["error"]?.jsonPrimitive?.contentOrNull
     }.getOrNull()?.takeIf { it.isNotBlank() }

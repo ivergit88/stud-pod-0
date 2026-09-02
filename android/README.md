@@ -52,40 +52,47 @@ android/
 
 ## Запуск проекта
 
-1. **Подготовка окружения** — установите:
-   - [Android Studio](https://developer.android.com/studio) (последняя стабильная версия);
-   - JDK 17 (Android Studio Bundled JBR подойдёт).
+> **Важно:** в Android Studio открывайте папку **`android/`** внутри репозитория,
+> а не корень репозитория (в корне нет Gradle-файлов — там backend сайта).
 
-2. **Откройте проект**: `File → Open… → android/` в этом репозитории.
-   Android Studio сам предложит настроить Gradle wrapper (Gradle 8.11.1).
+1. **Установите [Android Studio](https://developer.android.com/studio)** (стабильная версия).
+   Она поставляется со встроенной JDK — отдельно Java ставить не нужно.
 
-   Если открываете без Android Studio (CLI):
-   ```bash
-   cd android
-   # один раз сгенерировать wrapper (нужен установленный Gradle 8.x)
-   gradle wrapper --gradle-version 8.11.1
-   ```
+2. **Откройте проект**:
+   `File → Open…` → выберите папку `android/` → `OK`.
+   Android Studio определит Gradle-проект (wrapper `gradle-wrapper.jar` уже включён в репозиторий).
 
-3. **Подключение backend** (важно):
+3. **Дождитесь первой синхронизации Gradle** (Gradle 8.11.1 скачается автоматически).
+   Если Android Studio попросит установить компоненты — соглашайтесь:
+   - **Android SDK Platform 35**;
+   - **Android SDK Build-Tools 35**;
+   - **Android SDK Platform-Tools**.
+   Это стандартные компоненты — «что-то не установлено» означает именно их:
+   `Tools → SDK Manager → SDK Platforms/System Settings`.
+
+4. **Подключение backend**:
    - По умолчанию приложение ходит на прод: `https://xn----gtbba2cfjcjk2l.xn--p1ai`
-     (домен студ-подряд.рф в punycode). Прод-сервер должен быть доступен по HTTPS
-     и не блокировать запросы без Origin (нативный клиент).
-   - Для локальной разработки укажите адрес dev-бэкенда:
-     ```bash
-     # эмулятор → localhost на вашей машине
-     ./gradlew assembleDebug -PAPI_BASE_URL=http://10.0.2.2:3000
-     # или в Android Studio: View → Gradle → в поле -PAPI_BASE_URL=
+     (домен студ-подряд.рф в punycode).
+   - Для локальной разработки (эмулятор → ваш dev-сервер на `localhost:3000`)
+     раскомментируйте в файле `android/gradle.properties` строку:
+     ```properties
+     API_BASE_URL=http://10.0.2.2:3000
      ```
+     и нажмите **Sync Now**.
    - Обратите внимание: `POST /api/auth/login` и `/register` должны отдавать
      поле `token` — это уже реализовано в `server.ts` (см. `docs/api-mobile.md`).
 
-4. **Сборка и установка**:
-   ```bash
-   cd android
-   ./gradlew assembleDebug
-   # APK: app/build/outputs/apk/debug/app-debug.apk
-   adb install app/build/outputs/apk/debug/app-debug.apk
-   ```
+5. **Запуск**:
+   - выберите конфигурацию `app` в верхней панели;
+   - нажмите зелёный треугольник ▶ (Run). Приложение установится на эмулятор/устройство.
+
+Сборка из командной строки (альтернатива):
+```bash
+cd android
+./gradlew assembleDebug
+# APK: app/build/outputs/apk/debug/app-debug.apk
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
 
 ## Сборка релиза (APK / AAB)
 
@@ -177,10 +184,13 @@ YandexMetrica.reportEvent(name, params)
 
 | Проблема | Решение |
 |---|---|
+| «Устройство не выбрано / No device» | создайте эмулятор: `Tools → Device Manager → Create virtual device` или подключите телефон с включённой отладкой по USB |
+| «SDK Platform 35 не установлен» | `Tools → SDK Manager` → поставьте галочку и установите; затем `Sync Now` |
+| Ошибки про `Could not find org.jetbrains.kotlin...` и т.п. | подождите завершения первой синхронизации (скачиваются зависимости Gradle); проверьте интернет |
 | `401` при входе | dev-бэкенд должен возвращать `token` в login/register (правки в `server.ts` уже внесены) |
 | `Cleartext HTTP traffic not permitted` | используйте debug-сборку или HTTPS-адрес; в release cleartext запрещён намеренно |
-| `Could not find or load main class org.gradle.wrapper.GradleWrapperMain` | сгенерируйте wrapper: `gradle wrapper --gradle-version 8.11.1` |
-| Не собирается на Windows | используйте `gradlew.bat`; установите JDK 17 |
+| `Could not find or load main class org.gradle.wrapper.GradleWrapperMain` | файл `gradle/wrapper/gradle-wrapper.jar` должен лежать в репозитории (теперь он включён). Если удалился — восстановите из git: `git checkout android/gradle/wrapper/gradle-wrapper.jar` |
+| Не собирается на Windows | используйте `gradlew.bat`; в Android Studio Java уже встроена (Bundled JBR 17+) |
 | Пустой список задач | проверьте, что `API_BASE_URL` указывает на сервер с БД, где есть задачи со статусом `open` |
 
 ## Документация API
