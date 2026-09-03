@@ -48,6 +48,7 @@ class AuthViewModel @Inject constructor(
         middleName: String?,
         university: String,
         course: Int,
+        specialty: String? = null,
         skills: List<String>,
         password: String,
     ) {
@@ -61,6 +62,7 @@ class AuthViewModel @Inject constructor(
                 middleName = middleName,
                 university = university,
                 course = course,
+                description = specialty?.takeIf { it.isNotBlank() },
                 skills = skills,
             )
             when (val result = authRepository.registerStudent(data, password)) {

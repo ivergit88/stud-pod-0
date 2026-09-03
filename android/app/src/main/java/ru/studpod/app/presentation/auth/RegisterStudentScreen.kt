@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -34,7 +36,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -42,8 +46,20 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.studpod.app.core.util.Validators
 
+/**
+ * Набор навыков — зеркалит сайт (src/pages/RegisterStudent.tsx).
+ * Последний пункт «Другое» раскрывает поле для собственного навыка.
+ */
+private const val OTHER_SKILL_OPTION = "Другое"
+
 private val AVAILABLE_SKILLS = listOf(
-    "Контент", "Дизайн", "Сайт", "Бот", "Оцифровка", "3D", "Настройка", "Аналитика", "Другое",
+    "Программирование",
+    "Веб-разработка",
+    "Графический дизайн",
+    "Тексты и переводы",
+    "Социальные сети",
+    "Видео и аудио",
+    OTHER_SKILL_OPTION,
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -58,8 +74,13 @@ fun RegisterStudentScreen(
     var middleName by rememberSaveable { mutableStateOf("") }
     var university by rememberSaveable { mutableStateOf("") }
     var courseText by rememberSaveable { mutableStateOf("") }
+    var specialty by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var otherSkill by rememberSaveable { mutableStateOf("") }
     var selectedSkills by rememberSaveable { mutableStateOf(setOf<String>()) }
+    var agreeData by rememberSaveable { mutableStateOf(false) }
+    var agreeRules by rememberSaveable { mutableStateOf(false) }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
 
     val isSubmitting by viewModel.isSubmitting.collectAsStateWithLifecycle()
@@ -117,19 +138,36 @@ fun RegisterStudentScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            Text(
+                text = "Образование",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+
             OutlinedTextField(
                 value = university,
                 onValueChange = { university = it },
-                label = { Text("Вуз *") },
+                label = { Text("Учебное заведение *") },
+                placeholder = { Text("Например: ННГУ им. Лобачевского") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = courseText,
                 onValueChange = { courseText = it.filter(Char::isDigit).take(1) },
-                label = { Text("Курс (1–3) *") },
+                label = { Text("Курс обучения (1–3) *") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = specialty,
+                onValueChange = { specialty = it },
+                label = { Text("Направление подготовки *") },
+                placeholder = { Text("Например: Программная инженерия") },
+                singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -144,6 +182,7 @@ fun RegisterStudentScreen(
                         selected = skill in selectedSkills,
                         onClick = {
                             selectedSkills = if (skill in selectedSkills) {
+                                if (skill == OTHER_SKILL_OPTION) otherSkill = ""
                                 selectedSkills - skill
                             } else {
                                 selectedSkills + skill
@@ -153,7 +192,23 @@ fun RegisterStudentScreen(
                     )
                 }
             }
+            if (OTHER_SKILL_OPTION in selectedSkills) {
+                OutlinedTextField(
+                    value = otherSkill,
+                    onValueChange = { otherSkill = it },
+                    label = { Text("Укажите свой навык *") },
+                    placeholder = { Text("Например: UX-исследования, motion-дизайн") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
+            Text(
+                text = "Пароль",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 6.dp),
+            )
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
@@ -163,6 +218,27 @@ fun RegisterStudentScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                 modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = confirmPassword,
+                onValueChange = { confirmPassword = it },
+                label = { Text("Повторите пароль *") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            AgreementRow(
+                checked = agreeData,
+                onCheckedChange = { agreeData = it },
+                text = "Я согласен на обработку персональных данных в соответствии с Федеральным законом 152-ФЗ *",
+            )
+            AgreementRow(
+                checked = agreeRules,
+                onCheckedChange = { agreeRules = it },
+                text = "Я ознакомлен с правилами площадки *",
             )
 
             val message = validationError ?: serverError
@@ -180,12 +256,24 @@ fun RegisterStudentScreen(
                     validationError = when {
                         !Validators.isValidEmail(email) -> "Укажите корректный email"
                         lastName.isBlank() || firstName.isBlank() -> "Заполните имя и фамилию"
-                        university.isBlank() -> "Укажите вуз"
+                        university.isBlank() -> "Укажите учебное заведение"
                         course == null || !Validators.isValidCourse(course) -> "Курс: от 1 до 3"
+                        specialty.isBlank() -> "Укажите направление подготовки"
                         !Validators.isValidPassword(password) -> "Пароль — минимум 6 символов"
+                        confirmPassword != password -> "Пароли не совпадают"
+                        OTHER_SKILL_OPTION in selectedSkills && otherSkill.isBlank() ->
+                            "Если выбрали «Другое», укажите свой навык"
+                        !agreeData || !agreeRules ->
+                            "Необходимо согласиться с правилами и обработкой данных"
                         else -> null
                     }
                     if (validationError == null && course != null) {
+                        val finalSkills = selectedSkills
+                            .filter { it != OTHER_SKILL_OPTION }
+                            .toMutableList()
+                        if (OTHER_SKILL_OPTION in selectedSkills) {
+                            finalSkills.add(otherSkill.trim())
+                        }
                         viewModel.registerStudent(
                             email = email,
                             firstName = firstName.trim(),
@@ -193,7 +281,8 @@ fun RegisterStudentScreen(
                             middleName = middleName.trim().ifBlank { null },
                             university = university.trim(),
                             course = course,
-                            skills = selectedSkills.toList(),
+                            specialty = specialty.trim(),
+                            skills = finalSkills,
                             password = password,
                         )
                     }
@@ -216,5 +305,27 @@ fun RegisterStudentScreen(
             }
             Spacer(Modifier.height(16.dp))
         }
+    }
+}
+
+@Composable
+private fun AgreementRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    text: String,
+) {
+    Row(
+        verticalAlignment = Alignment.Top,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 10.dp),
+        )
     }
 }

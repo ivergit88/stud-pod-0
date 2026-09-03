@@ -17,11 +17,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -52,6 +54,7 @@ import ru.studpod.app.presentation.ui.theme.PointsPurple
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ProfileScreen(
+    onOpenPortfolio: () -> Unit = {},
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
     val user by viewModel.user.collectAsStateWithLifecycle()
@@ -90,6 +93,12 @@ fun ProfileScreen(
                             currentUser.course?.let { "$it курс" },
                         ).filterNotNull().joinToString(" · ").ifBlank { "Вуз не указан" },
                     )
+                    currentUser.description?.takeIf { it.isNotBlank() }?.let { direction ->
+                        ProfileRow(
+                            icon = { Icon(Icons.Default.School, null, tint = MaterialTheme.colorScheme.primary) },
+                            value = "Направление: $direction",
+                        )
+                    }
                     ProfileRow(
                         icon = { Icon(Icons.Default.Email, null, tint = MaterialTheme.colorScheme.primary) },
                         value = currentUser.email,
@@ -113,6 +122,39 @@ fun ProfileScreen(
                     currentUser.skills.forEach { skill ->
                         SkillChip(skill)
                     }
+                }
+            }
+
+            Card(
+                onClick = onOpenPortfolio,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.WorkspacePremium,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = "Мои кейсы",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 12.dp),
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 

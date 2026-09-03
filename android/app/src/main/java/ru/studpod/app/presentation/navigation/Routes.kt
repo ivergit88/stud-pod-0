@@ -17,4 +17,7 @@ object Routes {
     // Детали
     const val TASK_DETAILS = "task_details/{taskId}"
     fun taskDetails(taskId: String) = "task_details/$taskId"
+
+    // Портфолио (мои кейсы)
+    const val PORTFOLIO = "portfolio"
 }

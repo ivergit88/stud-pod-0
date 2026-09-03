@@ -105,7 +105,14 @@ fun MainScaffold(unreadCount: StateFlow<Int>) {
                 NotificationsScreen()
             }
             composable(Routes.PROFILE) {
-                ProfileScreen()
+                ProfileScreen(
+                    onOpenPortfolio = { navController.navigate(Routes.PORTFOLIO) },
+                )
+            }
+            composable(Routes.PORTFOLIO) {
+                PortfolioScreen(
+                    onBack = { navController.popBackStack() },
+                )
             }
             composable(Routes.TASK_DETAILS) {
                 TaskDetailsScreen(

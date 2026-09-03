@@ -186,7 +186,7 @@ YandexMetrica.reportEvent(name, params)
 |---|---|
 | «Устройство не выбрано / No device» | создайте эмулятор: `Tools → Device Manager → Create virtual device` или подключите телефон с включённой отладкой по USB |
 | «SDK Platform 35 не установлен» | `Tools → SDK Manager` → поставьте галочку и установите; затем `Sync Now` |
-| Ошибки про `Could not find org.jetbrains.kotlin...` и т.п. | подождите завершения первой синхронизации (скачиваются зависимости Gradle); проверьте интернет |
+| Ошибки про `Could not find org.jetbrains.kotlin...` / «не скачаны модули» | первая синхронизация скачивает Gradle 8.11.1 + сотни мегабайт зависимостей с `dl.google.com`, `repo.maven.apache.org`, `services.gradle.org`. Подождите завершения (внизу Android Studio — прогресс «Downloading …»). Если скачивание прерывается — проверьте доступ к этим доменам: они должны быть открыты без VPN-блокировок/антивирусного прокси; после исправления сети: `File → Sync Project with Gradle Files` |
 | `401` при входе | dev-бэкенд должен возвращать `token` в login/register (правки в `server.ts` уже внесены) |
 | `Cleartext HTTP traffic not permitted` | используйте debug-сборку или HTTPS-адрес; в release cleartext запрещён намеренно |
 | `Could not find or load main class org.gradle.wrapper.GradleWrapperMain` | файл `gradle/wrapper/gradle-wrapper.jar` должен лежать в репозитории (теперь он включён). Если удалился — восстановите из git: `git checkout android/gradle/wrapper/gradle-wrapper.jar` |
