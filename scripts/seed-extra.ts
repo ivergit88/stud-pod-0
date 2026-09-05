@@ -18,8 +18,8 @@ async function main() {
 
   // Products
   for (const p of [
-    { id: 'merch-hoodie-001', title: 'Худи «НЕЙМАРК Университет»', desc: 'Чёрная толстовка с белой эмблемой оленя и текстом «НЕЙМАРК Университет»', price: 1000, category: 'Мерч', imageUrl: '/merch/hoodie.jpg', stock: 25 },
-    { id: 'merch-tshirt-001', title: 'Футболка «НЕЙМАРК Университет»', desc: 'Чёрная футболка с белой эмблемой оленя и текстом «НЕЙМАРК Университет»', price: 1000, category: 'Мерч', imageUrl: '/merch/tshirt.jpg', stock: 25 },
+    { id: 'merch-hoodie-001', title: 'Худи «НЕЙМАРК Университет»', desc: 'Чёрная толстовка с белой эмблемой оленя и текстом «НЕЙМАРК Университет»', price: 1000, category: 'Мерч', imageUrl: '/rewards/partner-merch.png', stock: 25 },
+    { id: 'merch-tshirt-001', title: 'Футболка «НЕЙМАРК Университет»', desc: 'Чёрная футболка с белой эмблемой оленя и текстом «НЕЙМАРК Университет»', price: 1000, category: 'Мерч', imageUrl: '/rewards/partner-merch.png', stock: 25 },
   ]) {
     await db.run(
       `INSERT OR IGNORE INTO products (id, title, description, price, category, imageUrl, stock, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
