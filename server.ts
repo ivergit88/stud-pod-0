@@ -11,6 +11,7 @@ import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 import { initDb } from './database';
 import { createMobileApiRouter } from './src/server/mobile-api';
+import { createAdminRouter } from './src/server/admin-api';
 import {
   calculateOrganizationTrust,
   calculateTaskScorePreview,
@@ -3438,6 +3439,44 @@ app.post(
     } catch (error) {
       console.error('Read notification error:', error);
       return sendError(res, 500, 'Не удалось отметить уведомление');
+    }
+  },
+);
+
+// Админ-панель (статистика, управление пользователями, апелляции)
+app.use(
+  '/api/admin',
+  createAdminRouter({
+    initDb,
+    sendError,
+    requireAuth,
+    requireRole,
+    mapUser,
+  }),
+);
+
+// Апелляция (организация/админ может вернуть задачу на доработку)
+app.post(
+  '/api/task-responses/:responseId/appeal',
+  requireRole(['organization', 'admin']),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const { message } = req.body || {};
+      const db = await initDb();
+      const response = await db.get('SELECT * FROM task_responses WHERE id = ?', req.params.responseId);
+      if (!response) {
+        return sendError(res, 404, 'Отклик не найден');
+      }
+      await db.run('UPDATE task_responses SET appealed = 1, status = ?, updated_at = ? WHERE id = ?', 'needs_revision', new Date().toISOString(), req.params.responseId);
+      await db.run('UPDATE tasks SET status = ? WHERE id = ?', 'in_progress', response.taskId);
+      await db.run(
+        `INSERT INTO notifications (id, userId, title, message, read, type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [randomUUID(), response.studentId, 'Апелляция по задаче', String(message || 'Работа возвращена на доработку.').trim(), 0, 'warning', new Date().toISOString()],
+      );
+      return res.json({ ok: true });
+    } catch (e) {
+      console.error('Appeal error:', e);
+      return sendError(res, 500, 'Не удалось подать апелляцию');
     }
   },
 );
