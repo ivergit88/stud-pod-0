@@ -37,6 +37,12 @@ export const TaskDetails: React.FC = () => {
 
   const task = tasks.find(t => t.id === id || t.slug === id);
 
+  useEffect(() => {
+    if (task) {
+      trackGoal('task_card_open', { taskId: task.id });
+    }
+  }, [task?.id]);
+
   if (!task) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
@@ -109,10 +115,6 @@ export const TaskDetails: React.FC = () => {
         return haystack.includes(teammateQuery.trim().toLowerCase());
       })
     : [];
-
-  useEffect(() => {
-    trackGoal('task_card_open', { taskId: task.id });
-  }, [task.id]);
 
   const handleTakeTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -577,7 +579,21 @@ export const TaskDetails: React.FC = () => {
           {/* Student Actions */}
           {isStudent && !isProjectOverview && (
             <div className="mt-10 pt-8 border-t border-gray-100">
-              {!studentResponse ? (
+              {!studentResponse && task.status !== 'open' ? (
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6">
+                  <h4 className="text-lg font-bold text-gray-900">
+                    {task.status === 'completed' ? 'Задача выполнена — это кейс из пилота' : 'Отклик недоступен'}
+                  </h4>
+                  <p className="mt-2 text-sm leading-6 text-gray-600">
+                    {task.status === 'completed'
+                      ? 'Работа сдана и принята заказчиком, баллы начислены участникам. Посмотрите открытые задачи в каталоге — за них начисляются баллы.'
+                      : 'Эта задача сейчас недоступна для отклика. Посмотрите открытые задачи в каталоге.'}
+                  </p>
+                  <Link to="/задачи?status=open" className="mt-4 inline-flex rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700">
+                    Открытые задачи
+                  </Link>
+                </div>
+              ) : !studentResponse ? (
                 <div className="a11y-force-surface rounded-2xl border border-blue-100 bg-blue-50 p-6">
                   <div className="mb-4">
                     <h4 className="text-lg font-bold text-blue-900 mb-1">Готовы взяться за задачу?</h4>

@@ -2086,7 +2086,7 @@ app.get('/api/bootstrap', async (req: AuthenticatedRequest, res) => {
     const taskRows = user
       ? await db.all(`${TASK_SELECT_FIELDS} ORDER BY datetime(t.created_at) DESC`)
       : await db.all(
-          `${TASK_SELECT_FIELDS} WHERE t.status = 'open' ORDER BY datetime(t.created_at) DESC`,
+          `${TASK_SELECT_FIELDS} WHERE t.status != 'cancelled' ORDER BY datetime(t.created_at) DESC`,
         );
 
     let responseRows: DbRow[] = [];

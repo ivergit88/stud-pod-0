@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { Search, MapPin, Briefcase, Filter, Star, List, Map as MapIcon } from 'lucide-react';
 import { TasksMap } from '../components/TasksMap';
@@ -10,6 +10,10 @@ export const TaskCatalog: React.FC = () => {
   const { tasks, events } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'completed'>(
+    searchParams.get('status') === 'open' ? 'open' : searchParams.get('status') === 'completed' ? 'completed' : 'all',
+  );
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [mapFilter, setMapFilter] = useState<'all' | 'online' | 'hybrid' | 'offline' | 'events'>('all');
 
@@ -30,9 +34,14 @@ export const TaskCatalog: React.FC = () => {
     const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           task.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || task.category === selectedCategory;
-    const isPublished = task.status === 'open';
-    
-    return matchesSearch && matchesCategory && isPublished;
+    const matchesStatus =
+      statusFilter === 'all'
+        ? true
+        : statusFilter === 'open'
+          ? task.status === 'open'
+          : task.status === 'completed';
+
+    return matchesSearch && matchesCategory && matchesStatus;
   });
 
   const visibleMapTasks = filteredTasks.filter((task) =>
@@ -85,6 +94,29 @@ export const TaskCatalog: React.FC = () => {
         </div>
 
         <div className="mt-5 border-t border-gray-100 pt-5">
+          <div className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-600">
+            <Filter className="h-4 w-4 text-gray-400" />
+            Статус
+          </div>
+          <div className="mb-5 flex flex-wrap gap-2">
+            {([
+              ['all', 'Все задачи'],
+              ['open', 'Открытые для отклика'],
+              ['completed', 'Выполненные кейсы'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setStatusFilter(value)}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                  statusFilter === value
+                    ? 'bg-slate-900 text-white'
+                    : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-600">
             <Filter className="h-4 w-4 text-gray-400" />
             Тип задачи
@@ -180,6 +212,25 @@ export const TaskCatalog: React.FC = () => {
                       >
                         {getTaskFormatLabel(task.format)}
                       </span>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          task.status === 'open'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : task.status === 'in_progress'
+                              ? 'bg-amber-50 text-amber-700'
+                              : task.status === 'review'
+                                ? 'bg-violet-50 text-violet-700'
+                                : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {task.status === 'open'
+                          ? 'Открыта'
+                          : task.status === 'in_progress'
+                            ? 'В работе'
+                            : task.status === 'review'
+                              ? 'На проверке'
+                              : 'Принята заказчиком'}
+                      </span>
                     </div>
                     <div className="flex items-center text-amber-500 font-bold">
                       <Star className="w-4 h-4 mr-1 fill-current" />
@@ -231,7 +282,7 @@ export const TaskCatalog: React.FC = () => {
             <div className="col-span-full py-12 text-center bg-white rounded-3xl border border-gray-100">
               <p className="text-gray-500 text-lg">По вашему запросу задач не найдено.</p>
               <button 
-                onClick={() => { setSearchTerm(''); setSelectedCategory('all'); }}
+                onClick={() => { setSearchTerm(''); setSelectedCategory('all'); setStatusFilter('all'); }}
                 className="mt-4 text-blue-600 hover:text-blue-800 font-medium"
               >
                 Сбросить фильтры
