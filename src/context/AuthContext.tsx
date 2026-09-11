@@ -48,7 +48,7 @@ const createExpertUser = (role: 'student' | 'organization'): User => ({
   role,
   firstName: role === 'student' ? 'Эксперт' : '',
   lastName: role === 'student' ? 'Тестовый' : '',
-  name: role === 'student' ? 'Эксперт Тестовый' : 'Тестовое учреждение культуры',
+  name: role === 'student' ? 'Эксперт Тестовый' : 'Центральная библиотека г. Кстово',
   points: 120,
   university: role === 'student' ? 'Тестовый университет' : '',
   course: role === 'student' ? 2 : undefined,

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { apiRequest } from '../lib/api';
+import { buildExpertDemoState } from '../lib/expert-demo';
 import { useAuth } from './AuthContext';
 import type { TaskFormat } from '../lib/tasks';
 import type { TaskType, TaskUrgency, TaskWorkload } from '../lib/task-scoring';
@@ -269,7 +270,7 @@ export interface EvidenceStats {
   offlineEvents: number;
 }
 
-interface BootstrapPayload {
+export interface BootstrapPayload {
   tasks: Task[];
   responses: TaskResponse[];
   events: Event[];
@@ -365,16 +366,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const readExpertState = (): BootstrapPayload => {
     try {
-      const saved = JSON.parse(window.localStorage.getItem(EXPERT_DATA_KEY) || '{}');
+      const saved = window.localStorage.getItem(EXPERT_DATA_KEY);
+      if (!saved) {
+        return buildExpertDemoState();
+      }
+      const parsed = JSON.parse(saved);
       return {
         ...EMPTY_STATE,
-        ...saved,
-        platformStats: { ...EMPTY_STATE.platformStats, ...(saved.platformStats || {}) },
-        evidenceStats: { ...EMPTY_STATE.evidenceStats, ...(saved.evidenceStats || {}) },
-        rewardWinners: saved.rewardWinners || [],
+        ...parsed,
+        platformStats: { ...EMPTY_STATE.platformStats, ...(parsed.platformStats || {}) },
+        evidenceStats: { ...EMPTY_STATE.evidenceStats, ...(parsed.evidenceStats || {}) },
+        rewardWinners: parsed.rewardWinners || [],
       };
     } catch {
-      return EMPTY_STATE;
+      return buildExpertDemoState();
     }
   };
 
