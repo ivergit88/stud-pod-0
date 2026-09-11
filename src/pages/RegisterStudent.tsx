@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { trackGoal } from '../lib/metrika';
 
 const OTHER_SKILL_OPTION = 'Другое (укажите)';
 
@@ -112,7 +113,8 @@ export const RegisterStudent: React.FC = () => {
         description: formData.specialty.trim(), // Using description for specialty
         skills: finalSkills,
       }, formData.password);
-      
+      trackGoal('registration', { role: 'student' });
+
       setSuccess(true);
       setTimeout(() => {
         navigate('/студент');

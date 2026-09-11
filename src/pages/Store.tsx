@@ -1,14 +1,35 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { CheckCircle2, ShoppingBag, Star, Trophy } from 'lucide-react';
+import { CheckCircle2, LogIn, ShoppingBag, Star, Trophy } from 'lucide-react';
 
 export const Store: React.FC = () => {
   const { user } = useAuth();
   const { products, purchases, rewardWinners, buyProduct } = useData();
 
   if (!user || user.role !== 'student') {
-    return <div>Доступ запрещен</div>;
+    return (
+      <div className="mx-auto max-w-xl px-4 py-16 text-center">
+        <ShoppingBag className="mx-auto h-14 w-14 text-blue-700" />
+        <h1 className="mt-5 text-2xl font-extrabold text-gray-950 sm:text-3xl">Магазин поощрений</h1>
+        <p className="mt-3 leading-7 text-gray-600">
+          Здесь студенты обменивают заработанные баллы на мерч и подарки партнёров.
+          {user ? ' Баллами студента распоряжается только аккаунт студента.' : ' Войдите или зарегистрируйтесь как студент, чтобы копить баллы и обменивать их на награды.'}
+        </p>
+        {!user && (
+          <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link to="/вход" className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white transition hover:bg-blue-800">
+              <LogIn className="h-5 w-5" /> Войти
+            </Link>
+            <Link to="/регистрация-студент" className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-3 font-semibold text-gray-800 transition hover:bg-gray-50">
+              Зарегистрироваться как студент
+            </Link>
+          </div>
+        )}
+        <Link to="/задачи" className="mt-6 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-900">Посмотреть задачи, за которые начисляются баллы →</Link>
+      </div>
+    );
   }
 
   const handleBuy = async (productId: string, price: number) => {

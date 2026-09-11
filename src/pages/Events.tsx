@@ -118,20 +118,22 @@ export const Events: React.FC = () => {
                       <Calendar className="h-16 w-16" />
                     </div>
                   )}
-                  <div className="absolute left-4 top-4 inline-flex items-center rounded-full bg-white/95 px-3 py-1 text-sm font-semibold text-blue-700 shadow-sm">
-                    <Trophy className="mr-1.5 h-4 w-4" />
-                    {event.pointsReward} баллов
+                  <div className="absolute inset-x-3 top-3 flex flex-wrap items-start gap-2">
+                    <span className="inline-flex items-center rounded-full bg-white/95 px-3 py-1 text-sm font-semibold text-blue-700 shadow-sm">
+                      <Trophy className="mr-1.5 h-4 w-4" />
+                      {event.pointsReward} баллов
+                    </span>
+                    {isPast && (
+                      <span className="rounded-full bg-gray-800 px-3 py-1 text-xs font-bold text-white shadow-sm sm:text-sm">
+                        Мероприятие прошло
+                      </span>
+                    )}
                   </div>
-                  {isPast && (
-                    <div className="absolute right-4 top-4 rounded-full bg-gray-800 px-3 py-1 text-sm font-bold text-white shadow-sm">
-                      Мероприятие прошло
-                    </div>
-                  )}
                 </div>
 
                 <div className="flex flex-1 flex-col p-6">
-                  <div className="mb-4 flex items-center justify-between gap-3 text-sm text-gray-500">
-                    <div className="flex items-center">
+                  <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-500">
+                    <div className="flex flex-shrink-0 items-center">
                       <Calendar className="mr-1.5 h-4 w-4" />
                       {new Date(event.date).toLocaleDateString('ru-RU', {
                         day: 'numeric',

@@ -70,7 +70,7 @@ export const Notifications: React.FC = () => {
                       {notification.title}
                     </h3>
                     <span className="text-xs text-gray-500 sm:ml-4 sm:whitespace-nowrap">
-                      {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      {new Date(notification.createdAt).toLocaleDateString('ru-RU')} {new Date(notification.createdAt).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}
                     </span>
                   </div>
                   <p className={`text-sm ${notification.read ? 'text-gray-600' : 'text-gray-800'}`}>

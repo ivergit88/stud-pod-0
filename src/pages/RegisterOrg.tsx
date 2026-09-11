@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { trackGoal } from '../lib/metrika';
 import { getPendingTaskTemplateCreatePath } from '../lib/task-templates';
 
 export const RegisterOrg: React.FC = () => {
@@ -64,6 +65,7 @@ export const RegisterOrg: React.FC = () => {
         phone: formData.phone.trim(),
         status: 'moderation'
       }, formData.password);
+      trackGoal('registration', { role: 'organization' });
 
       setSuccess(true);
       setTimeout(() => {

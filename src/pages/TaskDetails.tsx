@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -6,6 +6,7 @@ import { Briefcase, Calendar, Star, CheckCircle, Clock, AlertCircle, Send, Penci
 import { getTaskFormatLabel } from '../lib/tasks';
 import { getTaskTypeLabel, getTaskUrgencyLabel, getTaskWorkloadLabel } from '../lib/task-scoring';
 import { isResponseLeader, isStudentInResponse } from '../lib/task-responses';
+import { trackGoal } from '../lib/metrika';
 
 export const TaskDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -109,11 +110,16 @@ export const TaskDetails: React.FC = () => {
       })
     : [];
 
+  useEffect(() => {
+    trackGoal('task_card_open', { taskId: task.id });
+  }, [task.id]);
+
   const handleTakeTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (user && user.role === 'student') {
       try {
         await takeTask(task.id, user.id, user.name, coverLetter);
+        trackGoal('task_response', { taskId: task.id });
       } catch (error) {
         console.error("Failed to take task", error);
         alert("Ошибка при отклике на задачу");
@@ -128,6 +134,7 @@ export const TaskDetails: React.FC = () => {
     if (studentResponse) {
       try {
         await submitTask(studentResponse.id, submissionLink);
+        trackGoal('result_submit', { taskId: studentResponse.taskId });
       } catch (error) {
         console.error("Failed to submit task", error);
         alert("Ошибка при отправке задачи");
