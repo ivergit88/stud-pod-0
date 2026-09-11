@@ -147,6 +147,9 @@ export interface TaskResponse {
   coverLetter?: string;
   submissionLink?: string;
   reviewComment?: string;
+  appealReason?: string;
+  appealedAt?: string;
+  appealCount: number;
   createdAt: string;
   updatedAt: string;
   teamMembers: TaskResponseTeamMember[];
@@ -176,6 +179,7 @@ export interface Event {
   pointsReward: number;
   registrationsCount: number;
   imageUrl?: string;
+  surveyUrl?: string;
   createdAt: string;
 }
 
@@ -228,6 +232,15 @@ export interface Purchase {
   createdAt: string;
 }
 
+export interface RewardWinner {
+  productId: string;
+  productTitle: string;
+  productImageUrl: string;
+  studentName: string;
+  price: number;
+  awardedAt: string;
+}
+
 export interface Notification {
   id: string;
   userId: string;
@@ -248,6 +261,14 @@ export interface PlatformStats {
   totalPointsAwarded: number;
 }
 
+export interface EvidenceStats {
+  registeredParticipants: number;
+  participatingOrganizations: number;
+  publishedTasks: number;
+  completedTasks: number;
+  offlineEvents: number;
+}
+
 interface BootstrapPayload {
   tasks: Task[];
   responses: TaskResponse[];
@@ -258,6 +279,8 @@ interface BootstrapPayload {
   notifications: Notification[];
   studentsDirectory: StudentDirectoryProfile[];
   platformStats: PlatformStats;
+  evidenceStats: EvidenceStats;
+  rewardWinners: RewardWinner[];
 }
 
 interface DataContextType extends BootstrapPayload {
@@ -275,12 +298,14 @@ interface DataContextType extends BootstrapPayload {
   removeTeamMember: (responseId: string, studentId: string) => Promise<void>;
   submitTask: (responseId: string, submissionLink: string) => Promise<void>;
   reviewTask: (responseId: string, status: 'completed' | 'needs_revision', comment: string) => Promise<void>;
+  appealCompletedTask: (responseId: string, reason: string) => Promise<void>;
   registerForEvent: (eventId: string) => Promise<void>;
   buyProduct: (productId: string, price: number) => Promise<void>;
   markNotificationAsRead: (notificationId: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
+const EXPERT_DATA_KEY = 'stud-pod-expert-data-v1';
 
 const EMPTY_STATE: BootstrapPayload = {
   tasks: [],
@@ -299,10 +324,18 @@ const EMPTY_STATE: BootstrapPayload = {
     totalResponses: 0,
     totalPointsAwarded: 0,
   },
+  evidenceStats: {
+    registeredParticipants: 64,
+    participatingOrganizations: 5,
+    publishedTasks: 12,
+    completedTasks: 12,
+    offlineEvents: 3,
+  },
+  rewardWinners: [],
 };
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isExpertMode } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [responses, setResponses] = useState<TaskResponse[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
@@ -312,6 +345,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [studentsDirectory, setStudentsDirectory] = useState<StudentDirectoryProfile[]>([]);
   const [platformStats, setPlatformStats] = useState<PlatformStats>(EMPTY_STATE.platformStats);
+  const [evidenceStats, setEvidenceStats] = useState<EvidenceStats>(EMPTY_STATE.evidenceStats);
+  const [rewardWinners, setRewardWinners] = useState<RewardWinner[]>([]);
   const [loading, setLoading] = useState(true);
 
   const applyState = (data: BootstrapPayload) => {
@@ -324,9 +359,49 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setNotifications(data.notifications);
     setStudentsDirectory(data.studentsDirectory);
     setPlatformStats(data.platformStats);
+    setEvidenceStats(data.evidenceStats || EMPTY_STATE.evidenceStats);
+    setRewardWinners(data.rewardWinners || []);
   };
 
+  const readExpertState = (): BootstrapPayload => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(EXPERT_DATA_KEY) || '{}');
+      return {
+        ...EMPTY_STATE,
+        ...saved,
+        platformStats: { ...EMPTY_STATE.platformStats, ...(saved.platformStats || {}) },
+        evidenceStats: { ...EMPTY_STATE.evidenceStats, ...(saved.evidenceStats || {}) },
+        rewardWinners: saved.rewardWinners || [],
+      };
+    } catch {
+      return EMPTY_STATE;
+    }
+  };
+
+  const writeExpertState = (next: BootstrapPayload) => {
+    window.localStorage.setItem(EXPERT_DATA_KEY, JSON.stringify(next));
+    applyState(next);
+  };
+
+  const getCurrentState = (): BootstrapPayload => ({
+    tasks,
+    responses,
+    events,
+    eventRegistrations,
+    products,
+    purchases,
+    notifications,
+    studentsDirectory,
+    platformStats,
+    evidenceStats,
+    rewardWinners,
+  });
+
   const loadData = async () => {
+    if (isExpertMode) {
+      applyState(readExpertState());
+      return;
+    }
     const data = await apiRequest<BootstrapPayload>('/api/bootstrap');
     applyState(data);
   };
@@ -342,7 +417,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
 
       try {
-        const data = await apiRequest<BootstrapPayload>('/api/bootstrap');
+        const data = isExpertMode
+          ? readExpertState()
+          : await apiRequest<BootstrapPayload>('/api/bootstrap');
         if (mounted) {
           applyState(data);
         }
@@ -363,7 +440,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       mounted = false;
     };
-  }, [authLoading, user?.id]);
+  }, [authLoading, isExpertMode, user?.id]);
 
   const runMutation = async (action: () => Promise<unknown>) => {
     await action();
@@ -371,6 +448,35 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addTask = async (taskData: TaskDraft) => {
+    if (isExpertMode) {
+      const now = new Date().toISOString();
+      const task: Task = {
+        ...taskData,
+        id: crypto.randomUUID(),
+        slug: crypto.randomUUID(),
+        format: taskData.format,
+        workload: taskData.workload,
+        taskType: taskData.taskType,
+        urgency: taskData.urgency,
+        requiresOrgMaterials: taskData.requiresOrgMaterials,
+        requiresOnsiteCheck: taskData.requiresOnsiteCheck,
+        pointsMin: Math.max(10, taskData.pointsReward - 10),
+        pointsRecommended: taskData.pointsReward,
+        pointsMax: taskData.pointsReward + 20,
+        pointsExplanation: ['Тестовый расчёт баллов'],
+        taskKind: 'single',
+        childOrder: 0,
+        subtaskCount: 0,
+        completedSubtaskCount: 0,
+        siblingCount: 0,
+        status: 'open',
+        createdAt: now,
+        attachments: [],
+      };
+      const state = getCurrentState();
+      writeExpertState({ ...state, tasks: [task, ...state.tasks] });
+      return;
+    }
     await runMutation(() =>
       apiRequest('/api/tasks', {
         method: 'POST',
@@ -380,6 +486,68 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const publishTaskProject = async (taskData: TaskProjectDraft) => {
+    if (isExpertMode) {
+      const now = new Date().toISOString();
+      const parentId = crypto.randomUUID();
+      const subtasks: Task[] = taskData.subtasks.map((subtask, index) => ({
+        id: crypto.randomUUID(),
+        slug: crypto.randomUUID(),
+        title: subtask.title,
+        description: subtask.description,
+        requirements: subtask.requirements,
+        organizationId: 'expert-organization',
+        organizationName: 'Тестовое учреждение культуры',
+        category: subtask.taskType,
+        format: taskData.format,
+        workload: subtask.workload,
+        taskType: subtask.taskType,
+        urgency: subtask.urgency,
+        requiresOrgMaterials: subtask.requiresOrgMaterials,
+        requiresOnsiteCheck: false,
+        pointsReward: subtask.pointsReward || 40,
+        pointsMin: subtask.pointsReward || 40,
+        pointsRecommended: subtask.pointsReward || 40,
+        pointsMax: subtask.pointsReward || 40,
+        pointsExplanation: ['Тестовый расчёт баллов'],
+        taskKind: 'subtask',
+        parentTaskId: parentId,
+        parentTaskTitle: taskData.title,
+        childOrder: index + 1,
+        subtaskCount: 0,
+        completedSubtaskCount: 0,
+        siblingCount: taskData.subtasks.length,
+        deadline: subtask.deadline,
+        status: 'open',
+        createdAt: now,
+        location: taskData.location,
+        coordinates: taskData.coordinates,
+        attachments: [],
+        materialsLink: taskData.materialsLink,
+      }));
+      const totalPoints = subtasks.reduce((sum, task) => sum + task.pointsReward, 0);
+      const parent: Task = {
+        ...subtasks[0],
+        id: parentId,
+        slug: crypto.randomUUID(),
+        title: taskData.title,
+        description: taskData.projectSummary || taskData.projectBrief,
+        requirements: taskData.projectRequirements,
+        pointsReward: totalPoints,
+        pointsMin: totalPoints,
+        pointsRecommended: totalPoints,
+        pointsMax: totalPoints,
+        taskKind: 'parent',
+        parentTaskId: undefined,
+        parentTaskTitle: undefined,
+        childOrder: 0,
+        subtaskCount: subtasks.length,
+        siblingCount: 0,
+        deadline: taskData.deadline,
+      };
+      const state = getCurrentState();
+      writeExpertState({ ...state, tasks: [parent, ...subtasks, ...state.tasks] });
+      return;
+    }
     await runMutation(() =>
       apiRequest('/api/tasks/project', {
         method: 'POST',
@@ -389,6 +557,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateTask = async (taskId: string, taskData: TaskUpdatePayload) => {
+    if (isExpertMode) {
+      const state = getCurrentState();
+      writeExpertState({
+        ...state,
+        tasks: state.tasks.map((task) => task.id === taskId ? { ...task, ...taskData, attachments: task.attachments } : task),
+      });
+      return;
+    }
     await runMutation(() =>
       apiRequest(`/api/tasks/${taskId}`, {
         method: 'PUT',
@@ -398,6 +574,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteTask = async (taskId: string) => {
+    if (isExpertMode) {
+      const state = getCurrentState();
+      writeExpertState({
+        ...state,
+        tasks: state.tasks.filter((task) => task.id !== taskId),
+        responses: state.responses.filter((response) => response.taskId !== taskId),
+      });
+      return;
+    }
     await runMutation(() =>
       apiRequest(`/api/tasks/${taskId}`, {
         method: 'DELETE',
@@ -432,6 +617,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateTaskStatus = async (taskId: string, status: Task['status']) => {
+    if (isExpertMode) {
+      const state = getCurrentState();
+      writeExpertState({ ...state, tasks: state.tasks.map((task) => task.id === taskId ? { ...task, status } : task) });
+      return;
+    }
     await runMutation(() =>
       apiRequest(`/api/tasks/${taskId}/status`, {
         method: 'PATCH',
@@ -446,6 +636,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     _studentName: string,
     coverLetter?: string,
   ) => {
+    if (isExpertMode) {
+      const state = getCurrentState();
+      const response: TaskResponse = {
+        id: crypto.randomUUID(),
+        taskId,
+        studentId: 'expert-student',
+        studentName: 'Эксперт Тестовый',
+        status: 'accepted',
+        coverLetter,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        appealCount: 0,
+        teamMembers: [{
+          id: crypto.randomUUID(), responseId: '', taskId, studentId: 'expert-student',
+          studentName: 'Эксперт Тестовый', role: 'leader', createdAt: new Date().toISOString(),
+        }],
+      };
+      response.teamMembers[0].responseId = response.id;
+      writeExpertState({
+        ...state,
+        responses: [response, ...state.responses],
+        tasks: state.tasks.map((task) => task.id === taskId ? { ...task, status: 'in_progress', executorId: 'expert-student' } : task),
+      });
+      return;
+    }
     await runMutation(() =>
       apiRequest(`/api/tasks/${taskId}/take`, {
         method: 'POST',
@@ -472,6 +687,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const submitTask = async (responseId: string, submissionLink: string) => {
+    if (isExpertMode) {
+      const state = getCurrentState();
+      const response = state.responses.find((item) => item.id === responseId);
+      writeExpertState({
+        ...state,
+        responses: state.responses.map((item) => item.id === responseId ? { ...item, submissionLink, status: 'submitted', updatedAt: new Date().toISOString() } : item),
+        tasks: state.tasks.map((task) => task.id === response?.taskId ? { ...task, status: 'review' } : task),
+      });
+      return;
+    }
     await runMutation(() =>
       apiRequest(`/api/task-responses/${responseId}/submit`, {
         method: 'POST',
@@ -485,6 +710,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     status: 'completed' | 'needs_revision',
     comment: string,
   ) => {
+    if (isExpertMode) {
+      const state = getCurrentState();
+      const response = state.responses.find((item) => item.id === responseId);
+      writeExpertState({
+        ...state,
+        responses: state.responses.map((item) => item.id === responseId ? { ...item, status, reviewComment: comment, updatedAt: new Date().toISOString() } : item),
+        tasks: state.tasks.map((task) => task.id === response?.taskId ? { ...task, status: status === 'completed' ? 'completed' : 'in_progress' } : task),
+      });
+      return;
+    }
     await runMutation(() =>
       apiRequest(`/api/task-responses/${responseId}/review`, {
         method: 'POST',
@@ -493,7 +728,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  const appealCompletedTask = async (responseId: string, reason: string) => {
+    if (isExpertMode) {
+      const state = getCurrentState();
+      const response = state.responses.find((item) => item.id === responseId);
+      writeExpertState({
+        ...state,
+        responses: state.responses.map((item) => item.id === responseId ? {
+          ...item,
+          status: 'needs_revision',
+          reviewComment: reason,
+          appealReason: reason,
+          appealedAt: new Date().toISOString(),
+          appealCount: (item.appealCount || 0) + 1,
+          updatedAt: new Date().toISOString(),
+        } : item),
+        tasks: state.tasks.map((task) => task.id === response?.taskId ? { ...task, status: 'in_progress' } : task),
+      });
+      return;
+    }
+    await runMutation(() => apiRequest(`/api/task-responses/${responseId}/appeal`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }));
+  };
+
   const registerForEvent = async (eventId: string) => {
+    if (isExpertMode) {
+      const state = getCurrentState();
+      if (state.eventRegistrations.some((item) => item.eventId === eventId && item.studentId === 'expert-student')) {
+        return;
+      }
+      writeExpertState({
+        ...state,
+        eventRegistrations: [{ id: crypto.randomUUID(), eventId, studentId: 'expert-student', createdAt: new Date().toISOString() }, ...state.eventRegistrations],
+        events: state.events.map((event) => event.id === eventId ? { ...event, registrationsCount: event.registrationsCount + 1 } : event),
+      });
+      return;
+    }
     await runMutation(() =>
       apiRequest(`/api/events/${eventId}/register`, {
         method: 'POST',
@@ -502,6 +774,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const buyProduct = async (productId: string, _price: number) => {
+    if (isExpertMode) {
+      const state = getCurrentState();
+      writeExpertState({
+        ...state,
+        purchases: [{ id: crypto.randomUUID(), productId, studentId: 'expert-student', price: _price, status: 'pending', createdAt: new Date().toISOString() }, ...state.purchases],
+      });
+      return;
+    }
     await runMutation(() =>
       apiRequest(`/api/products/${productId}/buy`, {
         method: 'POST',
@@ -510,6 +790,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const markNotificationAsRead = async (notificationId: string) => {
+    if (isExpertMode) {
+      const state = getCurrentState();
+      writeExpertState({ ...state, notifications: state.notifications.map((item) => item.id === notificationId ? { ...item, read: true } : item) });
+      return;
+    }
     await runMutation(() =>
       apiRequest(`/api/notifications/${notificationId}/read`, {
         method: 'POST',
@@ -541,11 +826,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removeTeamMember,
         submitTask,
         reviewTask,
+        appealCompletedTask,
         registerForEvent,
         buyProduct,
         markNotificationAsRead,
         studentsDirectory,
         platformStats,
+        evidenceStats,
+        rewardWinners,
       }}
     >
       {children}

@@ -7,3 +7,8 @@ database.sqlite
 *.zip
 *.log
 coverage/
+imported-user-credentials.csv
+*.sqlite.backup*
+__pycache__/
+*.pyc
+*:Zone.Identifier

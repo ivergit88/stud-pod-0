@@ -28,6 +28,11 @@ import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { Help } from './pages/Help';
 import { Terms } from './pages/Terms';
 import { TeamBuilder } from './pages/TeamBuilder';
+import { ExpertCabinet } from './pages/ExpertCabinet';
+import { AdminDashboard } from './pages/AdminDashboard';
+import { AdminSetup } from './pages/AdminSetup';
+import { Surveys } from './pages/Surveys';
+import { SurveyDetails } from './pages/SurveyDetails';
 
 export default function App() {
   return (
@@ -41,6 +46,11 @@ export default function App() {
               <Route path="регистрация" element={<RegisterChoice />} />
               <Route path="регистрация-студент" element={<RegisterStudent />} />
               <Route path="регистрация-организация" element={<RegisterOrg />} />
+              <Route path="эксперт" element={<ExpertCabinet />} />
+              <Route path="администратор" element={<AdminDashboard />} />
+              <Route path="администратор/настройка" element={<AdminSetup />} />
+              <Route path="опросы" element={<Surveys />} />
+              <Route path="опросы/:id" element={<SurveyDetails />} />
               <Route path="студент" element={<StudentDashboard />} />
               <Route path="организация" element={<OrgDashboard />} />
               <Route path="задачи" element={<TaskCatalog />} />

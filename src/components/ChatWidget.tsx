@@ -43,18 +43,17 @@ export const ChatWidget: React.FC = () => {
         })
       });
 
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'ИИ-помощник временно недоступен');
+      }
       
       if (data.reply) {
         setMessages(prev => [...prev, { role: 'assistant', text: data.reply }]);
       }
     } catch (error) {
       console.error('AI Error:', error);
-      setMessages(prev => [...prev, { role: 'assistant', text: 'Извините, произошла ошибка при обращении к ИИ. Пожалуйста, попробуйте позже.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', text: error instanceof Error ? error.message : 'ИИ-помощник временно недоступен. Попробуйте позже.' }]);
     } finally {
       setLoading(false);
     }

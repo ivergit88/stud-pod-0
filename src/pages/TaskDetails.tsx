@@ -18,6 +18,7 @@ export const TaskDetails: React.FC = () => {
     removeTeamMember,
     submitTask,
     reviewTask,
+    appealCompletedTask,
     deleteTask,
   } = useData();
   const { user } = useAuth();
@@ -26,6 +27,8 @@ export const TaskDetails: React.FC = () => {
   const [submissionLink, setSubmissionLink] = useState('');
   const [reviewComment, setReviewComment] = useState('');
   const [reviewStatus, setReviewStatus] = useState<'completed' | 'needs_revision'>('completed');
+  const [appealReasons, setAppealReasons] = useState<Record<string, string>>({});
+  const [appealingResponseId, setAppealingResponseId] = useState<string | null>(null);
   const [coverLetter, setCoverLetter] = useState('');
   const [teammateQuery, setTeammateQuery] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
@@ -44,7 +47,7 @@ export const TaskDetails: React.FC = () => {
     );
   }
 
-  const isOrgOwner = user?.role === 'organization' && user.id === task.organizationId;
+  const isOrgOwner = (user?.role === 'organization' && user.id === task.organizationId) || user?.role === 'admin';
   const isStudent = user?.role === 'student';
   const parentTask = task.parentTaskId
     ? tasks.find((candidate) => candidate.id === task.parentTaskId)
@@ -140,6 +143,27 @@ export const TaskDetails: React.FC = () => {
     } catch (error) {
       console.error("Failed to review task", error);
       alert("Ошибка при проверке задачи");
+    }
+  };
+
+  const handleAppeal = async (responseId: string) => {
+    const reason = String(appealReasons[responseId] || '').trim();
+    if (reason.length < 10) {
+      alert('Подробно опишите, что необходимо доработать. Минимум 10 символов.');
+      return;
+    }
+    if (!window.confirm('Вернуть принятую работу той же команде? Начисленные баллы будут отозваны до повторной приёмки.')) {
+      return;
+    }
+    setAppealingResponseId(responseId);
+    try {
+      await appealCompletedTask(responseId, reason);
+      setAppealReasons((current) => ({ ...current, [responseId]: '' }));
+    } catch (error) {
+      console.error('Failed to appeal completed task', error);
+      alert('Не удалось вернуть работу на доработку.');
+    } finally {
+      setAppealingResponseId(null);
     }
   };
 
@@ -947,6 +971,30 @@ export const TaskDetails: React.FC = () => {
                               Сохранить решение
                             </button>
                           </form>
+                        </div>
+                      )}
+
+                      {response.status === 'completed' && (
+                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-5">
+                          <h5 className="font-bold text-amber-950">Обнаружили недочёт после приёмки?</h5>
+                          <p className="mt-1 text-sm leading-6 text-amber-900">
+                            Подайте апелляцию: задача вернётся той же команде, а начисленные баллы временно отзовутся до повторной приёмки.
+                          </p>
+                          <textarea
+                            value={appealReasons[response.id] || ''}
+                            onChange={(event) => setAppealReasons((current) => ({ ...current, [response.id]: event.target.value }))}
+                            rows={3}
+                            placeholder="Опишите конкретные недочёты и ожидаемые исправления"
+                            className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-4 py-3 text-gray-900 focus:border-amber-500 focus:ring-amber-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void handleAppeal(response.id)}
+                            disabled={appealingResponseId === response.id}
+                            className="mt-3 rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+                          >
+                            {appealingResponseId === response.id ? 'Возвращаем...' : 'Вернуть на доработку'}
+                          </button>
                         </div>
                       )}
 

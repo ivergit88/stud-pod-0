@@ -10,6 +10,7 @@ import {
   type TaskAttachmentPayload,
 } from '../context/DataContext';
 import { apiRequest } from '../lib/api';
+import { ApiError } from '../lib/api';
 import { buildTaskAutofillDraft } from '../lib/task-autofill';
 import {
   clearPendingTaskTemplate,
@@ -130,6 +131,7 @@ export const CreateTask: React.FC = () => {
   const templateAppliedRef = useRef(false);
   const isEditMode = Boolean(taskId);
   const existingTask = isEditMode ? tasks.find((task) => task.id === taskId) : undefined;
+  const isAdmin = user?.role === 'admin';
 
   const [formData, setFormData] = useState({
     title: '',
@@ -157,12 +159,13 @@ export const CreateTask: React.FC = () => {
   const [autofillMissingInputs, setAutofillMissingInputs] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [projectPlanError, setProjectPlanError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [attachments, setAttachments] = useState<TaskAttachmentFormValue[]>([]);
 
   const orgTasks = useMemo(
-    () => tasks.filter((task) => task.organizationId === user?.id),
-    [tasks, user?.id],
+    () => tasks.filter((task) => task.organizationId === (isAdmin && existingTask ? existingTask.organizationId : user?.id)),
+    [tasks, user?.id, isAdmin, existingTask],
   );
   const trustProfile = useMemo(
     () => calculateOrganizationTrust(orgTasks, responses),
@@ -387,16 +390,23 @@ export const CreateTask: React.FC = () => {
   };
 
   const handleGenerateProjectPlan = async () => {
-    if (!formData.title.trim() || !projectBrief.trim() || !formData.deadline) {
-      alert('Укажите название проекта, большую задачу и дедлайн.');
+    const missingFields = [
+      !formData.title.trim() ? 'название проекта' : '',
+      !projectBrief.trim() ? 'описание большой задачи' : '',
+      !projectSummary.trim() ? 'ожидаемый итог' : '',
+      !formData.deadline ? 'дедлайн' : '',
+    ].filter(Boolean);
+    if (missingFields.length > 0) {
+      setProjectPlanError(`Заполните: ${missingFields.join(', ')}.`);
       return;
     }
 
     if (formData.format !== 'online' && !formData.location.trim()) {
-      alert('Для очной или смешанной задачи нужно указать место проведения.');
+      setProjectPlanError('Для очной или смешанной задачи укажите место проведения.');
       return;
     }
 
+    setProjectPlanError('');
     setIsGeneratingPlan(true);
 
     try {
@@ -417,13 +427,17 @@ export const CreateTask: React.FC = () => {
       setGeneratedPlan(result.plan);
     } catch (error) {
       console.error('Project breakdown error:', error);
-      alert('Не удалось подготовить проектный план. Попробуйте уточнить описание.');
+      setProjectPlanError(
+        error instanceof ApiError
+          ? error.message
+          : 'Сервер недоступен. Проверьте подключение и повторите попытку.',
+      );
     } finally {
       setIsGeneratingPlan(false);
     }
   };
 
-  if (!user || user.role !== 'organization') {
+  if (!user || (user.role !== 'organization' && user.role !== 'admin')) {
     return <div>Доступ запрещен</div>;
   }
 
@@ -435,7 +449,7 @@ export const CreateTask: React.FC = () => {
     return <div>Задача не найдена</div>;
   }
 
-  if (existingTask && existingTask.organizationId !== user.id) {
+  if (existingTask && !isAdmin && existingTask.organizationId !== user.id) {
     return <div>Доступ запрещен</div>;
   }
 
@@ -842,7 +856,17 @@ export const CreateTask: React.FC = () => {
           </div>
 
           {publicationMode === 'project' && !isEditMode ? (
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-6">
+              <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5">
+                <div className="text-sm font-bold uppercase tracking-wide text-violet-700">Как заполнить проект</div>
+                <div className="mt-3 grid gap-3 text-sm leading-6 text-violet-950 md:grid-cols-4">
+                  <div><strong>1. Название</strong><br />Коротко назовите общий результат.</div>
+                  <div><strong>2. Задача</strong><br />Опишите проблему и зачем её решать.</div>
+                  <div><strong>3. Итог</strong><br />Укажите файлы, страницу или иной результат.</div>
+                  <div><strong>4. Срок</strong><br />Выберите общий дедлайн проекта.</div>
+                </div>
+              </div>
+              <div className="grid gap-6 md:grid-cols-2">
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Большая задача проекта *
@@ -852,18 +876,19 @@ export const CreateTask: React.FC = () => {
                   value={projectBrief}
                   onChange={(e) => setProjectBrief(e.target.value)}
                   rows={5}
-                  placeholder="Опишите проект так, как вы бы рассказали его коллеге: что нужно получить в итоге и зачем это учреждению."
+                  placeholder="Например: у библиотеки есть архив выпусков газеты в PDF, но посетителям трудно искать нужный год. Нужно создать удобную цифровую страницу архива."
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Какой итог вы хотите получить
+                  Какой итог вы хотите получить *
                 </label>
                 <textarea
                   value={projectSummary}
                   onChange={(e) => setProjectSummary(e.target.value)}
                   rows={4}
+                  required
                   placeholder="Например: обновлённая страница, комплект публикаций и пакет материалов для сотрудников."
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500"
                 />
@@ -879,6 +904,7 @@ export const CreateTask: React.FC = () => {
                   placeholder="Например: не менять фирменный стиль, использовать только материалы учреждения, уложиться до даты мероприятия."
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500"
                 />
+              </div>
               </div>
             </div>
           ) : (
@@ -1337,10 +1363,18 @@ export const CreateTask: React.FC = () => {
                     связанной с общим проектом организации.
                   </p>
                 </div>
+                {projectPlanError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+                    {projectPlanError}
+                  </div>
+                )}
+                <div className="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm leading-6 text-blue-950">
+                  Обязательные поля: название, большая задача, ожидаемый итог и дедлайн. Если внешний ИИ недоступен, платформа всё равно сформирует безопасный план по встроенным правилам.
+                </div>
                 <button
                   type="button"
                   onClick={handleGenerateProjectPlan}
-                  disabled={isGeneratingPlan || !formData.title.trim() || !projectBrief.trim() || !formData.deadline}
+                  disabled={isGeneratingPlan}
                   className="a11y-force-accent inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-800 disabled:bg-blue-300"
                 >
                   {isGeneratingPlan ? 'Формируем...' : generatedPlan ? 'Сформировать заново' : 'Сформировать подзадачи'}

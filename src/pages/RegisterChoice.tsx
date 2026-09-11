@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, GraduationCap, ArrowRight } from 'lucide-react';
+import { Building2, GraduationCap, ArrowRight, FlaskConical } from 'lucide-react';
 
 export const RegisterChoice: React.FC = () => {
   return (
@@ -12,7 +12,7 @@ export const RegisterChoice: React.FC = () => {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-3">
         <Link
           to="/регистрация-студент"
           className="a11y-register-card a11y-force-surface group rounded-3xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-blue-300 hover:shadow-md sm:p-8"
@@ -43,6 +43,23 @@ export const RegisterChoice: React.FC = () => {
           </p>
           <div className="a11y-force-accent mt-6 inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold text-blue-700">
             Перейти к регистрации
+            <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </div>
+        </Link>
+
+        <Link
+          to="/эксперт"
+          className="a11y-register-card a11y-force-surface group rounded-3xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-violet-300 hover:shadow-md sm:p-8"
+        >
+          <div className="a11y-force-accent mb-5 inline-flex rounded-2xl bg-violet-50 p-4 text-violet-700">
+            <FlaskConical className="h-8 w-8" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">Я эксперт</h2>
+          <p className="mt-3 text-gray-600">
+            Без регистрации проверить интерфейс студента и учреждения в локальном тестовом режиме.
+          </p>
+          <div className="a11y-force-accent mt-6 inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold text-violet-700">
+            Запустить демонстрацию
             <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
           </div>
         </Link>

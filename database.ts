@@ -180,6 +180,43 @@ async function createDb() {
     )
   `);
 
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS admin_audit_log (
+      id TEXT PRIMARY KEY,
+      adminId TEXT,
+      adminEmail TEXT NOT NULL,
+      action TEXT NOT NULL,
+      targetType TEXT NOT NULL,
+      targetId TEXT,
+      details TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS system_errors (
+      id TEXT PRIMARY KEY,
+      method TEXT NOT NULL,
+      path TEXT NOT NULL,
+      status INTEGER NOT NULL,
+      message TEXT NOT NULL,
+      userId TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS surveys (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      questions TEXT NOT NULL,
+      sourceFile TEXT,
+      published INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   await ensureColumn(db, 'users', 'firstName', 'TEXT');
   await ensureColumn(db, 'users', 'lastName', 'TEXT');
   await ensureColumn(db, 'users', 'middleName', 'TEXT');
@@ -211,7 +248,11 @@ async function createDb() {
 
   await ensureColumn(db, 'task_responses', 'reviewComment', 'TEXT');
   await ensureColumn(db, 'task_responses', 'updated_at', 'DATETIME');
+  await ensureColumn(db, 'task_responses', 'appealReason', 'TEXT');
+  await ensureColumn(db, 'task_responses', 'appealed_at', 'DATETIME');
+  await ensureColumn(db, 'task_responses', 'appealCount', 'INTEGER DEFAULT 0');
   await ensureColumn(db, 'events', 'coordinates', 'TEXT');
+  await ensureColumn(db, 'events', 'surveyUrl', 'TEXT');
 
   await ensureColumn(db, 'notifications', 'link', 'TEXT');
   await ensureColumn(db, 'notifications', 'type', "TEXT DEFAULT 'info'");
@@ -232,6 +273,8 @@ async function createDb() {
     CREATE INDEX IF NOT EXISTS idx_event_registrations_student ON event_registrations(studentId);
     CREATE INDEX IF NOT EXISTS idx_purchases_student ON purchases(studentId);
     CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(userId);
+    CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_log(created_at);
+    CREATE INDEX IF NOT EXISTS idx_system_errors_created ON system_errors(created_at);
   `);
 
   await db.exec(`

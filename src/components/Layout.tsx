@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { LogOut, User, Bell, Briefcase, HelpCircle, LayoutDashboard, PlusCircle, Users, Eye, Calendar, Search } from 'lucide-react';
+import { LogOut, User, Bell, Briefcase, HelpCircle, LayoutDashboard, PlusCircle, Users, Eye, Calendar, Search, FlaskConical, ShieldCheck } from 'lucide-react';
 import {
   AccessibilityPanel,
   applyAccessibilitySettings,
@@ -12,7 +12,7 @@ import {
 import { ChatWidget } from './ChatWidget';
 
 export const Layout: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isExpertMode, switchExpertRole } = useAuth();
   const { notifications } = useData();
   const navigate = useNavigate();
   const location = useLocation();
@@ -79,7 +79,7 @@ export const Layout: React.FC = () => {
               >
                 <span className="site-logo-mark flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-950 ring-1 ring-blue-100 sm:h-12 sm:w-12">
                   <img
-                    src="/logo-sp.png?v=6"
+                    src="/logo-sp.png?v=7"
                     alt=""
                     className="site-logo-image h-full w-full object-contain"
                   />
@@ -133,7 +133,7 @@ export const Layout: React.FC = () => {
                   <div className="flex items-center space-x-2">
                     <div className="text-right hidden sm:block">
                       <div className="text-sm font-medium text-gray-900">{user.firstName || user.name} {user.lastName}</div>
-                      <div className="text-xs text-gray-500">{user.role === 'student' ? 'Студент' : 'Организация'}</div>
+                      <div className="text-xs text-gray-500">{user.role === 'student' ? 'Студент' : user.role === 'organization' ? 'Организация' : 'Администратор'}</div>
                     </div>
                     <button onClick={() => void handleLogout()} className="p-2 text-gray-500 hover:text-red-600 transition-colors" title="Выйти">
                       <LogOut className="h-5 w-5" />
@@ -154,6 +154,18 @@ export const Layout: React.FC = () => {
           </div>
         </div>
       </header>
+      {isExpertMode && user && (
+        <div className="border-b border-violet-200 bg-violet-50 px-4 py-3 text-violet-950">
+          <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center text-sm font-semibold"><FlaskConical className="mr-2 h-4 w-4" />Тестовый режим: данные остаются только в этом браузере</div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => { switchExpertRole('organization'); navigate('/организация'); }} className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${user.role === 'organization' ? 'bg-violet-700 text-white' : 'bg-white text-violet-800'}`}>Учреждение</button>
+              <button onClick={() => { switchExpertRole('student'); navigate('/студент'); }} className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${user.role === 'student' ? 'bg-violet-700 text-white' : 'bg-white text-violet-800'}`}>Студент</button>
+              <Link to="/эксперт" className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm font-semibold text-violet-800">Кабинет эксперта</Link>
+            </div>
+          </div>
+        </div>
+      )}
       {a11yPanelOpen && (
         <AccessibilityPanel
           onClose={() => setA11yPanelOpen(false)}
@@ -188,6 +200,12 @@ export const Layout: React.FC = () => {
                       (pathname.startsWith('/организация/задачи/') && pathname !== '/организация/задачи/новая')
                     }
                   />
+                </>
+              )}
+              {user.role === 'admin' && (
+                <>
+                  <NavLink to="/администратор" icon={<ShieldCheck />} label="Панель администратора" activeWhen={(pathname) => pathname === '/администратор'} />
+                  <NavLink to="/задачи" icon={<Briefcase />} label="Все задачи" activeWhen={(pathname) => pathname.startsWith('/задачи')} />
                 </>
               )}
               <div className="pt-4 mt-4 border-t border-gray-200">
@@ -227,6 +245,12 @@ export const Layout: React.FC = () => {
                     (pathname.startsWith('/организация/задачи/') && pathname !== '/организация/задачи/новая')
                   }
                 />
+              </>
+            )}
+            {user.role === 'admin' && (
+              <>
+                <MobileNavLink to="/администратор" icon={<ShieldCheck />} label="Админ" activeWhen={(pathname) => pathname === '/администратор'} />
+                <MobileNavLink to="/задачи" icon={<Briefcase />} label="Задачи" activeWhen={(pathname) => pathname.startsWith('/задачи')} />
               </>
             )}
           </div>

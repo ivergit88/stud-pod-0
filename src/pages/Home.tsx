@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Archive, ArrowRight, BarChart3, Bot, Building2, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, FileText, GraduationCap, LogIn, Palette, Sparkles, Trophy, UserPlus, Users, X, type LucideIcon } from 'lucide-react';
+import { Archive, ArrowRight, BarChart3, Bot, Building2, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, FileText, FlaskConical, GraduationCap, LogIn, Palette, Sparkles, Trophy, UserPlus, Users, X, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import {
@@ -238,7 +238,7 @@ const serviceCatalog: ServiceCatalogItem[] = [
 
 export const Home: React.FC = () => {
   const { user } = useAuth();
-  const { tasks, platformStats } = useData();
+  const { tasks, platformStats, evidenceStats, rewardWinners } = useData();
   const navigate = useNavigate();
   const pageRef = useRef<HTMLDivElement | null>(null);
   const heroRef = useRef<HTMLElement | null>(null);
@@ -333,24 +333,29 @@ export const Home: React.FC = () => {
 
   const homeMetrics = [
     {
-      value: platformStats.totalStudents,
-      label: 'Зарегистрированных студентов',
+      value: evidenceStats.registeredParticipants,
+      label: 'Зарегистрированных участников пилота',
       palette: 'bg-blue-700',
     },
     {
-      value: platformStats.totalOrganizations,
-      label: 'Организаций в системе',
+      value: evidenceStats.participatingOrganizations,
+      label: 'Учреждений в предметной работе',
       palette: 'bg-emerald-700',
     },
     {
-      value: platformStats.activeTasks,
-      label: 'Активных задач сейчас',
+      value: evidenceStats.publishedTasks,
+      label: 'Карточек задач опубликовано',
       palette: 'bg-orange-600',
     },
     {
-      value: platformStats.completedTasks,
+      value: evidenceStats.completedTasks,
       label: 'Задач доведено до результата',
       palette: 'bg-slate-800',
+    },
+    {
+      value: evidenceStats.offlineEvents,
+      label: 'Очные проектные сессии',
+      palette: 'bg-teal-700',
     },
     {
       value: `${PRODUCT_METRICS.savedBudgetRubles.toLocaleString('ru-RU')} ₽`,
@@ -507,6 +512,13 @@ export const Home: React.FC = () => {
                   <GraduationCap className="mr-2 h-6 w-6" />
                   Выбрать задачу
                 </button>
+                <Link
+                  to="/эксперт"
+                  className="home-action-button inline-flex items-center justify-center rounded-2xl bg-violet-700 px-8 py-4 text-lg font-medium text-white shadow-lg transition-all hover:-translate-y-1 hover:bg-violet-800 hover:shadow-xl"
+                >
+                  <FlaskConical className="mr-2 h-6 w-6" />
+                  Режим эксперта
+                </Link>
                 <a
                   href="#home-story-title"
                   className="home-action-button home-action-button--quiet inline-flex items-center justify-center rounded-2xl bg-slate-950 px-8 py-4 text-lg font-medium text-white shadow-lg transition-all hover:-translate-y-1 hover:bg-slate-800 hover:shadow-xl"
@@ -559,6 +571,34 @@ export const Home: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {rewardWinners.length > 0 && (
+        <section className="home-section-reveal home-scroll-reveal overflow-hidden rounded-[2rem] border border-amber-200 bg-[linear-gradient(135deg,#fff7df_0%,#ffffff_45%,#fff0d4_100%)] shadow-sm">
+          {rewardWinners.map((winner) => (
+            <div key={`${winner.productId}-${winner.studentName}`} className="grid items-center gap-8 p-6 sm:p-8 lg:grid-cols-[1fr_0.9fr] lg:p-10">
+              <div>
+                <div className="inline-flex items-center rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-800">
+                  <Trophy className="mr-2 h-5 w-5" />
+                  Итог пилота зафиксирован
+                </div>
+                <h2 className="mt-5 text-3xl font-extrabold leading-tight text-gray-950 sm:text-4xl">
+                  Александр Белов обменял баллы на мерч Неймарк
+                </h2>
+                <p className="mt-4 max-w-2xl text-base leading-8 text-gray-700">
+                  Самый активный участник пилота накопил больше всего баллов и обменял {winner.price.toLocaleString('ru-RU')} баллов на итоговую награду: {winner.productTitle.toLowerCase()}.
+                </p>
+                <div className="mt-5 inline-flex items-center rounded-xl bg-emerald-50 px-4 py-3 font-semibold text-emerald-800">
+                  <CheckCircle2 className="mr-2 h-5 w-5" />
+                  Награда выдана {new Date(winner.awardedAt).toLocaleDateString('ru-RU')}
+                </div>
+              </div>
+              <div className="rounded-3xl border border-white bg-white/90 p-3 shadow-lg">
+                <img src={winner.productImageUrl} alt={winner.productTitle} className="h-72 w-full rounded-2xl object-contain sm:h-96" />
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
 
       <section className="home-story home-section-reveal home-scroll-reveal overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm" aria-labelledby="home-story-title">
         <div className="home-story-header grid gap-6 p-5 sm:p-7 lg:grid-cols-[0.95fr_1.05fr] lg:p-8">

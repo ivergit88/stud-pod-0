@@ -2316,34 +2316,7 @@ html[class*="a11y-color-"] .home-story-image-shell::after {
     transform: none !important;
   }
 }
-/* Final logo override: use the text-free landscape mark without cropping. */
-.site-logo-mark {
-  padding: 0.125rem !important;
-}
-
-.site-logo-image {
-  object-fit: contain !important;
-  object-position: center !important;
-  transform: none !important;
-}
-
 /* Final accessibility and layout guardrails. Keep at the end to beat utility classes. */
-.site-logo-mark {
-  background-color: #ffffff;
-}
-
-.site-logo-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  filter: none;
-  opacity: 1;
-  object-fit: cover;
-  object-position: center 38%;
-  transform: scale(2.35);
-  transform-origin: center;
-}
-
 .site-logo-title {
   min-width: 0;
   hyphens: none;
@@ -2431,16 +2404,6 @@ html[class*="a11y-color-"] :where(.rounded-full, .a11y-task-chip, .a11y-org-badg
   html[class*="a11y-color-"] .site-logo-title {
     max-width: calc(100vw - 12.75rem) !important;
   }
-}
-
-.site-logo-mark {
-  background-color: #ffffff;
-}
-
-.site-logo-image {
-  transform: scale(2.35);
-  transform-origin: center;
-  object-position: center 38%;
 }
 
 html[class*="a11y-color-"] .site-logo-mark {

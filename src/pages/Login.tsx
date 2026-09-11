@@ -19,7 +19,11 @@ export const Login: React.FC = () => {
       const pendingTemplatePath =
         user.role === 'organization' ? getPendingTaskTemplateCreatePath() : null;
 
-      navigate(pendingTemplatePath || (user.role === 'organization' ? '/организация' : '/студент'));
+      navigate(
+        user.role === 'admin'
+          ? '/администратор'
+          : pendingTemplatePath || (user.role === 'organization' ? '/организация' : '/студент'),
+      );
     }
   }, [user, navigate]);
 
@@ -55,6 +59,10 @@ export const Login: React.FC = () => {
             <Link to="/регистрация" className="font-medium text-blue-700 hover:text-blue-600">
               зарегистрируйтесь
             </Link>
+          </p>
+          <p className="mt-3 text-center text-xs text-gray-500">
+            Администратор входит здесь по адресу `ershovivan2802@yandex.ru`. Первичная настройка доступна на странице{' '}
+            <Link to="/администратор/настройка" className="font-semibold text-blue-700 hover:text-blue-900">настройки администратора</Link>.
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>

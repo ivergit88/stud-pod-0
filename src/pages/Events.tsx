@@ -86,6 +86,7 @@ export const Events: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
         {events.length > 0 ? (
           events.map((event) => {
+            const isPast = new Date(event.date).getTime() < Date.now();
             const isRegistered = user
               ? eventRegistrations.some(
                   (registration) =>
@@ -99,7 +100,11 @@ export const Events: React.FC = () => {
             return (
               <article
                 key={event.id}
-                className="group flex h-full flex-col overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
+                className={`group flex h-full flex-col overflow-hidden rounded-3xl border shadow-sm transition-all ${
+                  isPast
+                    ? 'border-gray-300 bg-gray-100 text-gray-700 grayscale-[0.2]'
+                    : 'border-gray-200 bg-white hover:-translate-y-1 hover:shadow-md'
+                }`}
               >
                 <div className="relative h-52 overflow-hidden border-b border-gray-200 bg-gray-100">
                   {event.imageUrl ? (
@@ -117,6 +122,11 @@ export const Events: React.FC = () => {
                     <Trophy className="mr-1.5 h-4 w-4" />
                     {event.pointsReward} баллов
                   </div>
+                  {isPast && (
+                    <div className="absolute right-4 top-4 rounded-full bg-gray-800 px-3 py-1 text-sm font-bold text-white shadow-sm">
+                      Мероприятие прошло
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-1 flex-col p-6">
@@ -130,6 +140,12 @@ export const Events: React.FC = () => {
                         minute: '2-digit',
                       })}
                     </div>
+                    {event.surveyUrl && (
+                      <Link to={event.surveyUrl} className="inline-flex items-center font-semibold text-blue-700 hover:text-blue-900">
+                        Регистрация и опрос
+                        <ArrowRight className="ml-1.5 h-4 w-4" />
+                      </Link>
+                    )}
                     <div className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
                       <Users className="mr-1.5 h-3.5 w-3.5" />
                       {event.registrationsCount} записались
@@ -151,7 +167,12 @@ export const Events: React.FC = () => {
                   </div>
 
                   <div className="mt-6">
-                    {isRegistered ? (
+                    {isPast ? (
+                      <div className="flex w-full items-center justify-center rounded-xl border border-gray-300 bg-gray-200 py-3 font-semibold text-gray-700">
+                        <CheckCircle className="mr-2 h-5 w-5" />
+                        Завершено {new Date(event.date).toLocaleDateString('ru-RU')}
+                      </div>
+                    ) : isRegistered ? (
                       <div className="flex w-full items-center justify-center rounded-xl bg-green-50 py-3 font-medium text-green-700">
                         <CheckCircle className="mr-2 h-5 w-5" />
                         Вы записаны

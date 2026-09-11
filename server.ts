@@ -7,7 +7,7 @@ import path from 'path';
 import cookieParser from 'cookie-parser';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { randomUUID } from 'crypto';
+import { randomUUID, timingSafeEqual } from 'crypto';
 import { fileURLToPath } from 'url';
 import { initDb } from './database';
 import {
@@ -50,6 +50,8 @@ const TASK_ATTACHMENTS_DIR = 'task-materials';
 const MAX_TASK_ATTACHMENT_COUNT = 3;
 const MAX_TASK_ATTACHMENT_SIZE = 5 * 1024 * 1024;
 const MAX_TASK_TEAM_SIZE = 5;
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'ershovivan2802@yandex.ru').trim().toLowerCase();
+const ADMIN_SETUP_TOKEN = process.env.ADMIN_SETUP_TOKEN?.trim() || '';
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_RATE_LIMIT_MAX = 20;
 const EVENT_POINTS_MIN = 10;
@@ -243,6 +245,23 @@ interface PlatformStats {
   totalResponses: number;
   totalPointsAwarded: number;
 }
+
+interface RewardWinner {
+  productId: string;
+  productTitle: string;
+  productImageUrl: string;
+  studentName: string;
+  price: number;
+  awardedAt: string;
+}
+
+const PILOT_EVIDENCE_STATS = {
+  registeredParticipants: 64,
+  participatingOrganizations: 5,
+  publishedTasks: 12,
+  completedTasks: 12,
+  offlineEvents: 3,
+};
 
 interface TaskInsertInput {
   id: string;
@@ -989,6 +1008,9 @@ function mapTaskResponse(row: DbRow, teamMembers: TaskResponseMember[] = []) {
     coverLetter: row.coverLetter || '',
     submissionLink: row.submissionLink || '',
     reviewComment: row.reviewComment || '',
+    appealReason: row.appealReason || '',
+    appealedAt: row.appealed_at ? normalizeDate(row.appealed_at) : '',
+    appealCount: Number(row.appealCount || 0),
     createdAt: normalizeDate(row.created_at),
     updatedAt: normalizeDate(row.updated_at || row.created_at),
     teamMembers,
@@ -1025,6 +1047,7 @@ function mapEvent(row: DbRow) {
     pointsReward: Number(row.pointsReward || 0),
     registrationsCount: Number(row.registrationsCount || 0),
     imageUrl: row.imageUrl || '',
+    surveyUrl: row.surveyUrl || '',
     createdAt: normalizeDate(row.created_at),
   };
 }
@@ -1087,8 +1110,66 @@ function sendError(
   });
 }
 
+async function recordAdminAction(
+  user: CurrentUser,
+  action: string,
+  targetType: string,
+  targetId?: string,
+  details?: Record<string, unknown>,
+) {
+  const db = await initDb();
+  await db.run(
+    `
+      INSERT INTO admin_audit_log (id, adminId, adminEmail, action, targetType, targetId, details, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    randomUUID(),
+    user.id,
+    user.email,
+    action,
+    targetType,
+    targetId || '',
+    JSON.stringify(details || {}),
+    new Date().toISOString(),
+  );
+}
+
+function mapAdminUser(row: DbRow) {
+  const user = mapUser(row)!;
+  return {
+    ...user,
+    taskCount: Number(row.taskCount || 0),
+    responseCount: Number(row.responseCount || 0),
+  };
+}
+
+function mapAdminLog(row: DbRow) {
+  let details: Record<string, unknown> = {};
+  try {
+    details = JSON.parse(row.details || '{}');
+  } catch {
+    details = {};
+  }
+
+  return {
+    id: row.id,
+    adminEmail: row.adminEmail,
+    action: row.action,
+    targetType: row.targetType,
+    targetId: row.targetId || '',
+    details,
+    createdAt: normalizeDate(row.created_at),
+  };
+}
+
 function isValidEmail(email: string) {
   return /^\S+@\S+\.\S+$/.test(email);
+}
+
+function secretsMatch(actual: string, expected: string) {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
 function isValidHttpUrl(value: string) {
@@ -1566,11 +1647,82 @@ app.use(
 );
 app.use(express.json({ limit: '25mb' }));
 app.use(attachCurrentUser);
+app.use((req: AuthenticatedRequest, res, next) => {
+  if (!req.path.startsWith('/api/') || req.path === '/api/health') {
+    return next();
+  }
+
+  res.on('finish', () => {
+    if (res.statusCode < 500) {
+      return;
+    }
+
+    void initDb()
+      .then((db) => db.run(
+        `
+          INSERT INTO system_errors (id, method, path, status, message, userId, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `,
+        randomUUID(),
+        req.method,
+        req.originalUrl.slice(0, 500),
+        res.statusCode,
+        res.statusMessage || 'Internal Server Error',
+        req.currentUser?.id || '',
+        new Date().toISOString(),
+      ))
+      .catch((error) => console.error('Failed to record system error:', error));
+  });
+
+  return next();
+});
 
 app.get('/api/health', async (_req, res) => {
   const db = await initDb();
   await db.get('SELECT 1');
-  res.json({ status: 'ok' });
+  res.json({
+    status: 'ok',
+    ai: {
+      taskGenerator: Boolean(process.env.YANDEXGPT_API_KEY && process.env.YANDEX_FOLDER_ID),
+      assistant: Boolean(process.env.YANDEXGPT_API_KEY && process.env.YANDEX_FOLDER_ID),
+      fallbackAvailable: true,
+    },
+  });
+});
+
+app.get('/api/surveys', async (_req, res) => {
+  try {
+    const db = await initDb();
+    const rows = await db.all("SELECT id, title, description, sourceFile, created_at FROM surveys WHERE published = 1 ORDER BY created_at");
+    return res.json({ surveys: rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      sourceFile: row.sourceFile || '',
+      createdAt: normalizeDate(row.created_at),
+    })) });
+  } catch (error) {
+    console.error('Survey list error:', error);
+    return sendError(res, 500, 'Не удалось загрузить формы');
+  }
+});
+
+app.get('/api/surveys/:surveyId', async (req, res) => {
+  try {
+    const db = await initDb();
+    const row = await db.get("SELECT * FROM surveys WHERE id = ? AND published = 1", req.params.surveyId);
+    if (!row) return sendError(res, 404, 'Форма не найдена');
+    return res.json({ survey: {
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      questions: JSON.parse(row.questions || '[]'),
+      sourceFile: row.sourceFile || '',
+    } });
+  } catch (error) {
+    console.error('Survey details error:', error);
+    return sendError(res, 500, 'Не удалось загрузить форму');
+  }
 });
 
 app.get('/api/tasks/:taskId/attachments/:attachmentId/download', async (req, res) => {
@@ -1624,6 +1776,10 @@ app.post('/api/auth/register', rateLimitAuth, async (req: AuthenticatedRequest, 
     }
 
     const email = String(additionalData.email).trim().toLowerCase();
+
+    if (email === ADMIN_EMAIL) {
+      return sendError(res, 409, 'Для этого адреса используйте защищённую регистрацию администратора');
+    }
 
     if (!isValidEmail(email)) {
       return sendError(res, 400, 'Некорректный email', 'auth/invalid-email');
@@ -1687,6 +1843,8 @@ app.post('/api/auth/register', rateLimitAuth, async (req: AuthenticatedRequest, 
         : `${String(additionalData.firstName || '').trim()} ${String(
             additionalData.lastName || '',
           ).trim()}`.trim();
+    const assignedRole: CurrentUser['role'] = role;
+    const assignedStatus = additionalData.status || (role === 'organization' ? 'moderation' : 'active');
 
     await db.run(
       `
@@ -1701,7 +1859,7 @@ app.post('/api/auth/register', rateLimitAuth, async (req: AuthenticatedRequest, 
         id,
         email,
         passwordHash,
-        role,
+        assignedRole,
         name,
         0,
         additionalData.university || '',
@@ -1719,7 +1877,7 @@ app.post('/api/auth/register', rateLimitAuth, async (req: AuthenticatedRequest, 
         additionalData.address || '',
         additionalData.contactPerson || '',
         additionalData.phone || '',
-        additionalData.status || (role === 'organization' ? 'moderation' : 'active'),
+        assignedStatus,
         createdAt,
       ],
     );
@@ -1794,9 +1952,130 @@ app.post('/api/auth/login', rateLimitAuth, async (req: AuthenticatedRequest, res
   }
 });
 
+app.post('/api/auth/admin-setup', rateLimitAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    const setupToken = String(req.body?.setupToken || '');
+
+    if (!ADMIN_SETUP_TOKEN || ADMIN_SETUP_TOKEN.length < 16) {
+      return sendError(res, 503, 'Защищённая регистрация администратора не настроена на сервере');
+    }
+    if (email !== ADMIN_EMAIL || !secretsMatch(setupToken, ADMIN_SETUP_TOKEN)) {
+      return sendError(res, 403, 'Неверный адрес или ключ настройки');
+    }
+    if (password.length < 10) {
+      return sendError(res, 400, 'Пароль администратора должен содержать не менее 10 символов');
+    }
+
+    const db = await initDb();
+    const passwordHash = await bcrypt.hash(password, 12);
+    const existing = await db.get('SELECT * FROM users WHERE email = ?', ADMIN_EMAIL);
+
+    if (existing) {
+      await db.run(
+        "UPDATE users SET password_hash = ?, role = 'admin', status = 'active', name = ? WHERE id = ?",
+        passwordHash,
+        existing.name || 'Администратор платформы',
+        existing.id,
+      );
+    } else {
+      await db.run(
+        `
+          INSERT INTO users (id, email, password_hash, role, name, points, status, created_at)
+          VALUES (?, ?, ?, 'admin', ?, 0, 'active', ?)
+        `,
+        randomUUID(),
+        ADMIN_EMAIL,
+        passwordHash,
+        'Администратор платформы',
+        new Date().toISOString(),
+      );
+    }
+
+    const row = await db.get('SELECT * FROM users WHERE email = ?', ADMIN_EMAIL);
+    const user = mapUser(row);
+    if (!user) {
+      return sendError(res, 500, 'Не удалось создать администратора');
+    }
+    setSessionCookie(res, user);
+    await recordAdminAction(user, existing ? 'admin_access_reset' : 'admin_created', 'user', user.id);
+    return res.status(existing ? 200 : 201).json({ user });
+  } catch (error) {
+    console.error('Admin setup error:', error);
+    return sendError(res, 500, 'Не удалось настроить администратора');
+  }
+});
+
 app.post('/api/auth/logout', (_req, res) => {
   clearSessionCookie(res);
   return res.json({ ok: true });
+});
+
+app.get('/api/admin/overview', requireRole(['admin']), async (_req, res) => {
+  try {
+    const db = await initDb();
+    const [userRows, auditRows, errorRows] = await Promise.all([
+      db.all(`
+        SELECT
+          u.*,
+          (SELECT COUNT(*) FROM tasks t WHERE t.organizationId = u.id) AS taskCount,
+          (SELECT COUNT(*) FROM task_response_members trm WHERE trm.studentId = u.id) AS responseCount
+        FROM users u
+        ORDER BY datetime(u.created_at) DESC
+      `),
+      db.all('SELECT * FROM admin_audit_log ORDER BY datetime(created_at) DESC LIMIT 100'),
+      db.all('SELECT * FROM system_errors ORDER BY datetime(created_at) DESC LIMIT 100'),
+    ]);
+
+    return res.json({
+      users: userRows.map(mapAdminUser),
+      evidenceStats: PILOT_EVIDENCE_STATS,
+      auditLog: auditRows.map(mapAdminLog),
+      errors: errorRows.map((row) => ({
+        id: row.id,
+        method: row.method,
+        path: row.path,
+        status: Number(row.status),
+        message: row.message,
+        userId: row.userId || '',
+        createdAt: normalizeDate(row.created_at),
+      })),
+    });
+  } catch (error) {
+    console.error('Admin overview error:', error);
+    return sendError(res, 500, 'Не удалось загрузить данные администратора');
+  }
+});
+
+app.patch('/api/admin/users/:userId/status', requireRole(['admin']), async (req: AuthenticatedRequest, res) => {
+  try {
+    const status = String(req.body?.status || '').trim();
+    if (!['active', 'blocked', 'moderation'].includes(status)) {
+      return sendError(res, 400, 'Некорректный статус пользователя');
+    }
+
+    const db = await initDb();
+    const target = await db.get('SELECT * FROM users WHERE id = ?', req.params.userId);
+    if (!target) {
+      return sendError(res, 404, 'Пользователь не найден');
+    }
+    if (target.role === 'admin' || String(target.email).toLowerCase() === ADMIN_EMAIL) {
+      return sendError(res, 409, 'Нельзя изменить статус администратора');
+    }
+
+    await db.run('UPDATE users SET status = ? WHERE id = ?', status, req.params.userId);
+    await recordAdminAction(req.currentUser!, 'user_status_changed', 'user', req.params.userId, {
+      email: target.email,
+      previousStatus: target.status,
+      status,
+    });
+    const updated = await db.get('SELECT * FROM users WHERE id = ?', req.params.userId);
+    return res.json({ user: mapUser(updated) });
+  } catch (error) {
+    console.error('Admin user status error:', error);
+    return sendError(res, 500, 'Не удалось изменить статус пользователя');
+  }
 });
 
 app.get('/api/bootstrap', async (req: AuthenticatedRequest, res) => {
@@ -1846,6 +2125,20 @@ app.get('/api/bootstrap', async (req: AuthenticatedRequest, res) => {
 
     const eventRows = await db.all(`${EVENT_SELECT_FIELDS} GROUP BY e.id ORDER BY datetime(e.date) ASC`);
     const productRows = await db.all('SELECT * FROM products ORDER BY datetime(created_at) DESC');
+    const rewardWinnerRows = await db.all(`
+      SELECT
+        p.id AS productId,
+        p.title AS productTitle,
+        p.imageUrl AS productImageUrl,
+        u.name AS studentName,
+        pu.price,
+        pu.created_at AS awardedAt
+      FROM purchases pu
+      INNER JOIN products p ON p.id = pu.productId
+      INNER JOIN users u ON u.id = pu.studentId
+      WHERE pu.status = 'fulfilled'
+      ORDER BY datetime(pu.created_at) DESC
+    `);
 
     let eventRegistrationRows: DbRow[] = [];
     let purchaseRows: DbRow[] = [];
@@ -1896,6 +2189,15 @@ app.get('/api/bootstrap', async (req: AuthenticatedRequest, res) => {
       notifications: notificationRows.map(mapNotification),
       studentsDirectory: studentDirectoryRows.map(mapStudentDirectoryProfile),
       platformStats,
+      evidenceStats: PILOT_EVIDENCE_STATS,
+      rewardWinners: rewardWinnerRows.map((row): RewardWinner => ({
+        productId: row.productId,
+        productTitle: row.productTitle,
+        productImageUrl: row.productImageUrl || '',
+        studentName: row.studentName,
+        price: Number(row.price || 0),
+        awardedAt: normalizeDate(row.awardedAt),
+      })),
     });
   } catch (error) {
     console.error('Bootstrap error:', error);
@@ -1925,13 +2227,17 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    const reply = await callYandexGpt(formattedMessages);
-
-    if (!reply) {
-      return sendError(res, 502, 'Не удалось получить ответ от модели');
+    try {
+      const reply = await callYandexGpt(formattedMessages);
+      if (reply) return res.json({ reply, source: 'yandexgpt' });
+    } catch (aiError) {
+      console.error('YandexGPT chat fallback:', aiError);
     }
 
-    return res.json({ reply });
+    return res.json({
+      reply: 'Внешний ИИ сейчас недоступен, но основные функции платформы работают. Для создания задачи откройте кабинет учреждения, выберите «Создать задачу», заполните название, описание, ожидаемый результат и дедлайн. Для проверки пути без регистрации откройте «Режим эксперта».',
+      source: 'fallback',
+    });
   } catch (error: any) {
     console.error('YandexGPT chat error:', error.response?.data || error.message || error);
     return sendError(res, 500, 'Ошибка при обращении к ИИ');
@@ -2483,6 +2789,12 @@ app.put(
       );
 
       const updated = await getTaskRowById(req.params.taskId);
+      if (user.role === 'admin') {
+        await recordAdminAction(user, 'task_updated', 'task', req.params.taskId, {
+          title: String(title).trim(),
+          organizationId: task.organizationId,
+        });
+      }
       return res.json({ task: mapTask(updated) });
     } catch (error) {
       console.error('Update task error:', error);
@@ -2545,6 +2857,13 @@ app.delete(
         await syncParentTaskStatus(task.parentTaskId);
       }
 
+      if (user.role === 'admin') {
+        await recordAdminAction(user, 'task_deleted', 'task', req.params.taskId, {
+          title: task.title,
+          organizationId: task.organizationId,
+        });
+      }
+
       return res.json({ ok: true });
     } catch (error) {
       console.error('Delete task error:', error);
@@ -2581,6 +2900,13 @@ app.patch(
         await syncParentTaskStatus(task.parentTaskId);
       }
       const updated = await getTaskRowById(req.params.taskId);
+      if (req.currentUser?.role === 'admin') {
+        await recordAdminAction(req.currentUser, 'task_status_changed', 'task', req.params.taskId, {
+          previousStatus: task.status,
+          status,
+          title: task.title,
+        });
+      }
       return res.json({ task: mapTask(updated) });
     } catch (error) {
       console.error('Update task status error:', error);
@@ -3117,6 +3443,100 @@ app.post(
     } catch (error) {
       console.error('Review task error:', error);
       return sendError(res, 500, 'Не удалось проверить работу');
+    }
+  },
+);
+
+app.post(
+  '/api/task-responses/:responseId/appeal',
+  requireRole(['organization', 'admin']),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const reason = String(req.body?.reason || '').trim();
+      if (reason.length < 10) {
+        return sendError(res, 400, 'Опишите причину возврата минимум в 10 символах');
+      }
+
+      const db = await initDb();
+      const response = await db.get('SELECT * FROM task_responses WHERE id = ?', req.params.responseId);
+      if (!response) {
+        return sendError(res, 404, 'Отклик не найден');
+      }
+      if (response.status !== 'completed') {
+        return sendError(res, 409, 'Вернуть на доработку можно только принятую работу');
+      }
+
+      const task = await db.get('SELECT * FROM tasks WHERE id = ?', response.taskId);
+      if (!task) {
+        return sendError(res, 404, 'Задача не найдена');
+      }
+      if (req.currentUser?.role !== 'admin' && task.organizationId !== req.currentUser?.id) {
+        return sendError(res, 403, 'Недостаточно прав');
+      }
+
+      const teamMembers = await getTaskResponseMembers(req.params.responseId);
+      const participantIds = teamMembers.length
+        ? teamMembers.map((member) => member.studentId)
+        : [response.studentId];
+      const now = new Date().toISOString();
+      const points = Number(task.pointsReward || 0);
+
+      await withTransaction(async () => {
+        const txDb = await initDb();
+        await txDb.run(
+          `
+            UPDATE task_responses
+            SET status = 'needs_revision', reviewComment = ?, appealReason = ?, appealed_at = ?,
+                appealCount = COALESCE(appealCount, 0) + 1, updated_at = ?
+            WHERE id = ? AND status = 'completed'
+          `,
+          reason,
+          reason,
+          now,
+          now,
+          req.params.responseId,
+        );
+        await txDb.run('UPDATE tasks SET status = ? WHERE id = ?', 'in_progress', task.id);
+
+        for (const studentId of participantIds) {
+          await txDb.run(
+            'UPDATE users SET points = MAX(0, COALESCE(points, 0) - ?) WHERE id = ?',
+            points,
+            studentId,
+          );
+          await txDb.run(
+            `
+              INSERT INTO notifications (id, userId, title, message, read, type, link, created_at)
+              VALUES (?, ?, ?, ?, 0, 'warning', ?, ?)
+            `,
+            randomUUID(),
+            studentId,
+            'Принятая работа возвращена на доработку',
+            `Учреждение повторно проверило задачу "${task.title}" и вернуло её на доработку. Начисленные ${points} баллов временно отозваны до повторной приёмки.`,
+            taskPublicPath(task),
+            now,
+          );
+        }
+      });
+
+      if (task.parentTaskId) {
+        await syncParentTaskStatus(task.parentTaskId);
+      }
+      if (req.currentUser?.role === 'admin') {
+        await recordAdminAction(req.currentUser, 'completed_work_appealed', 'task_response', response.id, {
+          taskId: task.id,
+          reason,
+          pointsRevokedPerParticipant: points,
+        });
+      }
+
+      const updated = await db.get('SELECT * FROM task_responses WHERE id = ?', req.params.responseId);
+      return res.json({
+        response: mapTaskResponse(updated, await getTaskResponseMembers(req.params.responseId)),
+      });
+    } catch (error) {
+      console.error('Appeal completed task error:', error);
+      return sendError(res, 500, 'Не удалось вернуть принятую работу на доработку');
     }
   },
 );
