@@ -151,10 +151,9 @@ export const Portfolio: React.FC = () => {
             </div>
             <div className="mt-6 pt-6 border-t border-blue-500/30 flex justify-between items-end print:border-gray-200">
               <div>
-                <p className="text-blue-200 text-xs uppercase tracking-wider mb-1 print:text-gray-500">Рейтинг</p>
+                <p className="text-blue-200 text-xs uppercase tracking-wider mb-1 print:text-gray-500">Выполнено проектов</p>
                 <div className="flex items-center text-xl font-bold">
-                  <Star className="w-5 h-5 mr-1 fill-current text-amber-400" />
-                  4.9
+                  {completedCount}
                 </div>
               </div>
               <div className="text-right">
@@ -183,13 +182,13 @@ export const Portfolio: React.FC = () => {
                 <p className="text-xs leading-tight text-gray-500 sm:text-sm">Отзывов</p>
               </div>
               <div className="min-w-0 rounded-2xl border border-gray-100 bg-gray-50 px-2 py-4">
-                <p className="mb-1 break-words text-sm font-bold leading-tight tracking-tight text-gray-900 sm:text-xl">Топ 10%</p>
-                <p className="text-xs leading-tight text-gray-500 sm:text-sm">В рейтинге</p>
+                <p className="mb-1 break-words text-lg font-bold leading-tight text-gray-900 sm:text-2xl">{totalPoints}</p>
+                <p className="break-words text-xs leading-tight text-gray-500 sm:text-sm">Баллов</p>
               </div>
             </div>
             
             <div>
-              <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3">Подтвержденные навыки</h4>
+              <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3">Навыки и направления опыта</h4>
               <div className="flex flex-wrap gap-2">
                 {skills.length > 0 ? (
                   skills.map((skill, index) => (

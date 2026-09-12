@@ -19,12 +19,6 @@ import storyPointsMerch from '../assets/story/points-merch.png';
 import storyStart from '../assets/story/start.png';
 import storyStudentCase from '../assets/story/student-case.png';
 
-const PRODUCT_METRICS = {
-  savedBudgetRubles: 52740,
-  codeLines: 18849,
-  engineeringHours: 247,
-};
-
 const heroProofPoints = [
   'микрозадачи с проверяемым результатом',
   'кейс в портфолио после принятия работы',
@@ -358,13 +352,13 @@ export const Home: React.FC = () => {
       palette: 'bg-teal-700',
     },
     {
-      value: `${PRODUCT_METRICS.savedBudgetRubles.toLocaleString('ru-RU')} ₽`,
-      label: 'Сэкономлено бюджетных средств',
+      value: 20,
+      label: 'Участников в активных ролях пилота',
       palette: 'bg-violet-700',
     },
     {
-      value: `${PRODUCT_METRICS.codeLines.toLocaleString('ru-RU')} / ${PRODUCT_METRICS.engineeringHours} ч`,
-      label: 'Строк кода / часов работы',
+      value: '85,7%',
+      label: 'Участников сессий лучше понимают путь к кейсу',
       palette: 'bg-rose-700',
     },
     {

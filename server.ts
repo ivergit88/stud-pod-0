@@ -54,6 +54,8 @@ const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'ershovivan2802@yandex.ru').trim
 const ADMIN_SETUP_TOKEN = process.env.ADMIN_SETUP_TOKEN?.trim() || '';
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_RATE_LIMIT_MAX = 20;
+const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const CHAT_RATE_LIMIT_MAX = 10;
 const EVENT_POINTS_MIN = 10;
 const EVENT_POINTS_MAX = 80;
 const OTHER_SKILL_PLACEHOLDER = 'Другое (укажите)';
@@ -342,6 +344,35 @@ function rateLimitAuth(req: Request, res: Response, next: NextFunction) {
   if (bucket.count >= AUTH_RATE_LIMIT_MAX) {
     res.setHeader('Retry-After', String(Math.ceil((bucket.resetAt - now) / 1000)));
     return sendError(res, 429, 'Слишком много попыток. Повторите позже.');
+  }
+
+  bucket.count += 1;
+  return next();
+}
+
+const chatRateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function rateLimitChat(req: Request, res: Response, next: NextFunction) {
+  const now = Date.now();
+  const key = getClientIp(req);
+  const bucket = chatRateLimitBuckets.get(key);
+
+  if (chatRateLimitBuckets.size > 5000) {
+    for (const [bucketKey, value] of chatRateLimitBuckets) {
+      if (value.resetAt <= now) {
+        chatRateLimitBuckets.delete(bucketKey);
+      }
+    }
+  }
+
+  if (!bucket || bucket.resetAt <= now) {
+    chatRateLimitBuckets.set(key, { count: 1, resetAt: now + CHAT_RATE_LIMIT_WINDOW_MS });
+    return next();
+  }
+
+  if (bucket.count >= CHAT_RATE_LIMIT_MAX) {
+    res.setHeader('Retry-After', String(Math.ceil((bucket.resetAt - now) / 1000)));
+    return sendError(res, 429, 'Слишком много обращений к помощнику. Попробуйте через несколько минут.');
   }
 
   bucket.count += 1;
@@ -934,13 +965,15 @@ function isUserBlocked(row?: DbRow | CurrentUser | null) {
   return String(row?.status || '').trim().toLowerCase() === 'blocked';
 }
 
-function mapTask(row: DbRow) {
+function mapTask(row: DbRow, options: { publicOnly?: boolean } = {}) {
   const scoringInput = buildTaskScoringInput(row);
   const explanation = parseStringArray(row.pointsExplanation);
-  const attachments = parseTaskAttachments(row.attachments).map((attachment) => ({
-    ...attachment,
-    url: buildTaskAttachmentDownloadUrl(row.id, attachment.id),
-  }));
+  const attachments = options.publicOnly
+    ? []
+    : parseTaskAttachments(row.attachments).map((attachment) => ({
+        ...attachment,
+        url: buildTaskAttachmentDownloadUrl(row.id, attachment.id),
+      }));
 
   return {
     id: row.id,
@@ -974,11 +1007,13 @@ function mapTask(row: DbRow) {
     deadline: row.deadline,
     status: row.status,
     createdAt: normalizeDate(row.created_at),
-    executorId: row.executorId || undefined,
+    // Для анонимного каталога не раскрываем исполнителя, адрес учреждения,
+    // ссылки на материалы и вложения — это рабочий материал участников задачи.
+    executorId: options.publicOnly ? undefined : row.executorId || undefined,
     location: row.location || undefined,
     coordinates: parseCoordinates(row.coordinates),
     attachments,
-    materialsLink: row.materialsLink || '',
+    materialsLink: options.publicOnly ? '' : row.materialsLink || '',
   };
 }
 
@@ -1606,6 +1641,44 @@ function requireRole(roles: CurrentUser['role'][]) {
   };
 }
 
+class StoreRaceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StoreRaceError';
+  }
+}
+
+class TaskClaimConflictError extends Error {
+  constructor() {
+    super('Task already claimed');
+    this.name = 'TaskClaimConflictError';
+  }
+}
+
+function requireActiveOrganization() {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    const user = req.currentUser;
+    if (!user) {
+      return sendError(res, 401, 'Требуется авторизация');
+    }
+    if (isUserBlocked(user)) {
+      clearSessionCookie(res);
+      return sendError(res, 403, 'Пользователь заблокирован. Обратитесь к администратору.');
+    }
+    if (user.role !== 'organization' && user.role !== 'admin') {
+      return sendError(res, 403, 'Доступно только учреждениям');
+    }
+    if (user.role === 'organization' && (user.status || 'active') !== 'active') {
+      return sendError(
+        res,
+        403,
+        'Заявка учреждения ещё на модерации. Публикация задач и мероприятий откроется после подтверждения администратором.',
+      );
+    }
+    return next();
+  };
+}
+
 app.disable('x-powered-by');
 app.set('trust proxy', trustProxySetting);
 app.use((_req, res, next) => {
@@ -1725,12 +1798,28 @@ app.get('/api/surveys/:surveyId', async (req, res) => {
   }
 });
 
-app.get('/api/tasks/:taskId/attachments/:attachmentId/download', async (req, res) => {
+app.get('/api/tasks/:taskId/attachments/:attachmentId/download', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
+    const db = await initDb();
+    const user = req.currentUser!;
     const task = await getTaskRowById(req.params.taskId);
 
     if (!task) {
       return sendError(res, 404, 'Задача не найдена');
+    }
+
+    const isOrgOwner = task.organizationId === user.id || user.role === 'admin';
+    let isTaskParticipant = false;
+    if (user.role === 'student') {
+      const membership = await db.get(
+        'SELECT id FROM task_response_members WHERE taskId = ? AND studentId = ?',
+        task.id,
+        user.id,
+      );
+      isTaskParticipant = Boolean(membership);
+    }
+    if (!isOrgOwner && !isTaskParticipant) {
+      return sendError(res, 403, 'Материалы доступны участникам задачи, учреждению и администратору');
     }
 
     const attachment = parseTaskAttachments(task.attachments).find(
@@ -1844,7 +1933,8 @@ app.post('/api/auth/register', rateLimitAuth, async (req: AuthenticatedRequest, 
             additionalData.lastName || '',
           ).trim()}`.trim();
     const assignedRole: CurrentUser['role'] = role;
-    const assignedStatus = additionalData.status || (role === 'organization' ? 'moderation' : 'active');
+    // Статус назначает только сервер: клиентское значение не учитывается.
+    const assignedStatus = role === 'organization' ? 'moderation' : 'active';
 
     await db.run(
       `
@@ -2178,7 +2268,7 @@ app.get('/api/bootstrap', async (req: AuthenticatedRequest, res) => {
     }
 
     return res.json({
-      tasks: taskRows.map(mapTask),
+      tasks: taskRows.map((row) => mapTask(row, { publicOnly: !user })),
       responses: responseRows.map((row) =>
         mapTaskResponse(row, responseMembersByResponseId.get(String(row.id)) || []),
       ),
@@ -2205,24 +2295,36 @@ app.get('/api/bootstrap', async (req: AuthenticatedRequest, res) => {
   }
 });
 
-app.post('/api/chat', async (req, res) => {
+const CHAT_SYSTEM_INSTRUCTION =
+  'Вы - дружелюбный и компетентный помощник платформы "Студенческий подряд". Ваша задача - помогать студентам и организациям (учреждениям культуры) пользоваться платформой. Отвечайте кратко, по делу и вежливо. Используйте только короткое тире (-), никогда не используйте длинное тире.';
+const CHAT_MAX_MESSAGES = 10;
+const CHAT_MAX_MESSAGE_LENGTH = 3000;
+const CHAT_MAX_TOTAL_LENGTH = 6000;
+
+app.post('/api/chat', rateLimitChat, async (req, res) => {
   try {
-    const { messages, systemInstruction } = req.body || {};
+    const { messages } = req.body || {};
+    // Инструкция ассистенту задаётся только сервером: клиентскую не принимаем.
 
-    const formattedMessages: Array<{ role: string; text: string }> = [];
+    const formattedMessages: Array<{ role: string; text: string }> = [
+      { role: 'system', text: CHAT_SYSTEM_INSTRUCTION },
+    ];
 
-    if (systemInstruction) {
-      formattedMessages.push({
-        role: 'system',
-        text: String(systemInstruction),
-      });
-    }
+    let totalLength = CHAT_SYSTEM_INSTRUCTION.length;
 
     if (Array.isArray(messages)) {
-      for (const message of messages) {
+      for (const message of messages.slice(-CHAT_MAX_MESSAGES)) {
+        const text = String(message?.text || message?.content || '');
+        if (text.length > CHAT_MAX_MESSAGE_LENGTH) {
+          return sendError(res, 400, 'Сообщение слишком длинное (до 3000 символов).');
+        }
+        totalLength += text.length;
+        if (totalLength > CHAT_MAX_TOTAL_LENGTH) {
+          return sendError(res, 400, 'Диалог слишком длинный. Начните новый разговор.');
+        }
         formattedMessages.push({
           role: message?.role === 'user' ? 'user' : 'assistant',
-          text: String(message?.text || message?.content || ''),
+          text,
         });
       }
     }
@@ -2244,7 +2346,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-app.post('/api/ai/task-brief', requireRole(['organization', 'admin']), async (req, res) => {
+app.post('/api/ai/task-brief', requireActiveOrganization(), async (req, res) => {
   try {
     const { simplePrompt } = req.body || {};
     const prompt = String(simplePrompt || '').trim();
@@ -2289,7 +2391,7 @@ app.post('/api/ai/task-brief', requireRole(['organization', 'admin']), async (re
   }
 });
 
-app.post('/api/ai/task-breakdown', requireRole(['organization', 'admin']), async (req: AuthenticatedRequest, res) => {
+app.post('/api/ai/task-breakdown', requireActiveOrganization(), async (req: AuthenticatedRequest, res) => {
   try {
     const user = req.currentUser!;
     const {
@@ -2363,7 +2465,7 @@ app.post('/api/ai/task-breakdown', requireRole(['organization', 'admin']), async
   }
 });
 
-app.post('/api/tasks/project', requireRole(['organization', 'admin']), async (req: AuthenticatedRequest, res) => {
+app.post('/api/tasks/project', requireActiveOrganization(), async (req: AuthenticatedRequest, res) => {
   try {
     const user = req.currentUser!;
     const {
@@ -2520,7 +2622,7 @@ app.post('/api/tasks/project', requireRole(['organization', 'admin']), async (re
   }
 });
 
-app.post('/api/tasks', requireRole(['organization', 'admin']), async (req: AuthenticatedRequest, res) => {
+app.post('/api/tasks', requireActiveOrganization(), async (req: AuthenticatedRequest, res) => {
   try {
     const user = req.currentUser!;
     const {
@@ -2647,7 +2749,7 @@ app.post('/api/tasks', requireRole(['organization', 'admin']), async (req: Authe
 
 app.put(
   '/api/tasks/:taskId',
-  requireRole(['organization', 'admin']),
+  requireActiveOrganization(),
   async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.currentUser!;
@@ -2805,7 +2907,7 @@ app.put(
 
 app.delete(
   '/api/tasks/:taskId',
-  requireRole(['organization', 'admin']),
+  requireActiveOrganization(),
   async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.currentUser!;
@@ -2839,6 +2941,17 @@ app.delete(
 
       await withTransaction(async () => {
         const txDb = await initDb();
+        // Атомарный захват: обновление срабатывает, только пока задача свободна.
+        const claim = await txDb.run(
+          'UPDATE tasks SET status = ?, executorId = ? WHERE id = ? AND status = ?',
+          'in_progress',
+          user.id,
+          req.params.taskId,
+          'open',
+        );
+        if (claim.changes !== 1) {
+          throw new TaskClaimConflictError();
+        }
         await txDb.run(
           'DELETE FROM notifications WHERE link IN (?, ?, ?)',
           `/организация/задачи/${req.params.taskId}`,
@@ -2893,6 +3006,25 @@ app.patch(
 
       if (!allowedStatuses.includes(status)) {
         return sendError(res, 400, 'Некорректный статус задачи');
+      }
+
+      // Рабочий статус задачи вычисляется действиями участников: отклик → в работе →
+      // на проверке → принята. Учреждение вручную может только отменить ещё не взятую задачу.
+      if (req.currentUser?.role !== 'admin') {
+        if (task.status !== 'open' || status !== 'cancelled') {
+          return sendError(
+            res,
+            403,
+            'Статус работы меняется автоматически по действиям участников. Учреждение может отменить только ещё не взятую задачу.',
+          );
+        }
+        const existingResponse = await db.get(
+          'SELECT id FROM task_responses WHERE taskId = ? LIMIT 1',
+          req.params.taskId,
+        );
+        if (existingResponse) {
+          return sendError(res, 409, 'По задаче уже есть отклик — отмена недоступна');
+        }
       }
 
       await db.run('UPDATE tasks SET status = ? WHERE id = ?', status, req.params.taskId);
@@ -2990,13 +3122,6 @@ app.post(
         );
 
         await txDb.run(
-          'UPDATE tasks SET status = ?, executorId = ? WHERE id = ?',
-          'in_progress',
-          user.id,
-          req.params.taskId,
-        );
-
-        await txDb.run(
           `
             INSERT INTO notifications (id, userId, title, message, read, type, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -3022,6 +3147,9 @@ app.post(
         response: mapTaskResponse(response, await getTaskResponseMembers(responseId)),
       });
     } catch (error) {
+      if (error instanceof TaskClaimConflictError) {
+        return sendError(res, 409, 'Задачу только что взял другой студент. Выберите другую задачу.');
+      }
       console.error('Take task error:', error);
       return sendError(res, 500, 'Не удалось откликнуться на задачу');
     }
@@ -3256,6 +3384,11 @@ app.post(
         return sendError(res, 403, 'Недостаточно прав');
       }
 
+      // Повторная отправка результата по уже закрытому отклику = способ повторно выбить баллы.
+      if (!['accepted', 'needs_revision'].includes(response.status)) {
+        return sendError(res, 409, 'Результат уже отправлен или работа завершена. Повторная отправка недоступна.');
+      }
+
       const task = await db.get('SELECT * FROM tasks WHERE id = ?', response.taskId);
       if (!task) {
         return sendError(res, 404, 'Задача не найдена');
@@ -3269,7 +3402,7 @@ app.post(
           `
             UPDATE task_responses
             SET status = ?, submissionLink = ?, updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND status IN ('accepted', 'needs_revision')
           `,
           'submitted',
           String(submissionLink).trim(),
@@ -3381,7 +3514,8 @@ app.post(
         if (status === 'completed') {
           await txDb.run('UPDATE tasks SET status = ? WHERE id = ?', 'completed', task.id);
 
-          if (response.status !== 'completed') {
+          // Баллы начисляются строго один раз за жизненный цикл отклика (флаг pointsAwarded).
+          if (response.status !== 'completed' && !response.pointsAwarded) {
             for (const participant of participants) {
               await txDb.run(
                 'UPDATE users SET points = COALESCE(points, 0) + ? WHERE id = ?',
@@ -3389,6 +3523,10 @@ app.post(
                 participant.studentId,
               );
             }
+            await txDb.run(
+              'UPDATE task_responses SET pointsAwarded = 1 WHERE id = ?',
+              req.params.responseId,
+            );
           }
 
           for (const participant of participants) {
@@ -3497,6 +3635,10 @@ app.post(
           req.params.responseId,
         );
         await txDb.run('UPDATE tasks SET status = ? WHERE id = ?', 'in_progress', task.id);
+        await txDb.run(
+          'UPDATE task_responses SET pointsAwarded = 0 WHERE id = ?',
+          req.params.responseId,
+        );
 
         for (const studentId of participantIds) {
           await txDb.run(
@@ -3541,7 +3683,7 @@ app.post(
   },
 );
 
-app.post('/api/events', requireRole(['organization', 'admin']), async (req: AuthenticatedRequest, res) => {
+app.post('/api/events', requireActiveOrganization(), async (req: AuthenticatedRequest, res) => {
   try {
     const user = req.currentUser!;
     const { title, description, date, location, coordinates, pointsReward, imageUrl } = req.body || {};
@@ -3600,7 +3742,7 @@ app.post('/api/events', requireRole(['organization', 'admin']), async (req: Auth
 
 app.put(
   '/api/events/:eventId',
-  requireRole(['organization', 'admin']),
+  requireActiveOrganization(),
   async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.currentUser!;
@@ -3664,7 +3806,7 @@ app.put(
 
 app.delete(
   '/api/events/:eventId',
-  requireRole(['organization', 'admin']),
+  requireActiveOrganization(),
   async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.currentUser!;
@@ -3768,6 +3910,25 @@ app.post(
 
       await withTransaction(async () => {
         const txDb = await initDb();
+        // Атомарные списания: условные UPDATE защищают от гонки параллельных покупок.
+        const pointsSpent = await txDb.run(
+          'UPDATE users SET points = COALESCE(points, 0) - ? WHERE id = ? AND points >= ?',
+          Number(product.price || 0),
+          user.id,
+          Number(product.price || 0),
+        );
+        if (pointsSpent.changes !== 1) {
+          throw new StoreRaceError('Недостаточно баллов');
+        }
+
+        const stockSpent = await txDb.run(
+          'UPDATE products SET stock = COALESCE(stock, 0) - 1 WHERE id = ? AND stock > 0',
+          req.params.productId,
+        );
+        if (stockSpent.changes !== 1) {
+          throw new StoreRaceError('Товар закончился');
+        }
+
         await txDb.run(
           `
             INSERT INTO purchases (id, productId, studentId, price, status, created_at)
@@ -3781,17 +3942,6 @@ app.post(
             'pending',
             createdAt,
           ],
-        );
-
-        await txDb.run(
-          'UPDATE users SET points = COALESCE(points, 0) - ? WHERE id = ?',
-          Number(product.price || 0),
-          user.id,
-        );
-
-        await txDb.run(
-          'UPDATE products SET stock = COALESCE(stock, 0) - 1 WHERE id = ?',
-          req.params.productId,
         );
 
         await txDb.run(
@@ -3814,6 +3964,9 @@ app.post(
       const purchase = await db.get('SELECT * FROM purchases WHERE id = ?', purchaseId);
       return res.status(201).json({ purchase: mapPurchase(purchase) });
     } catch (error) {
+      if (error instanceof StoreRaceError) {
+        return sendError(res, 409, error.message);
+      }
       console.error('Buy product error:', error);
       return sendError(res, 500, 'Не удалось оформить покупку');
     }

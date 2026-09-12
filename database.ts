@@ -251,6 +251,7 @@ async function createDb() {
   await ensureColumn(db, 'task_responses', 'appealReason', 'TEXT');
   await ensureColumn(db, 'task_responses', 'appealed_at', 'DATETIME');
   await ensureColumn(db, 'task_responses', 'appealCount', 'INTEGER DEFAULT 0');
+  await ensureColumn(db, 'task_responses', 'pointsAwarded', 'INTEGER DEFAULT 0');
   await ensureColumn(db, 'events', 'coordinates', 'TEXT');
   await ensureColumn(db, 'events', 'surveyUrl', 'TEXT');
 
@@ -276,6 +277,16 @@ async function createDb() {
     CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_log(created_at);
     CREATE INDEX IF NOT EXISTS idx_system_errors_created ON system_errors(created_at);
   `);
+
+  // Защита от двойного отклика: уникальный индекс добавляем только если дубликатов ещё нет.
+  const duplicateResponses = await db.all(
+    'SELECT taskId, studentId FROM task_responses GROUP BY taskId, studentId HAVING COUNT(*) > 1',
+  );
+  if (duplicateResponses.length === 0) {
+    await db.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_task_responses_task_student_unique ON task_responses(taskId, studentId)',
+    );
+  }
 
   await db.exec(`
     INSERT INTO task_response_members (id, responseId, taskId, studentId, studentName, role, created_at)
